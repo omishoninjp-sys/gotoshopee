@@ -1,8 +1,8 @@
 import os
 
 # Shopee API 設定
-PARTNER_ID = int(os.environ.get("SHOPEE_PARTNER_ID", "1215936"))
-PARTNER_KEY = os.environ.get("SHOPEE_PARTNER_KEY", "你的_partner_key")
+PARTNER_ID = os.environ.get("SHOPEE_PARTNER_ID", "1215936")
+PARTNER_KEY = os.environ.get("SHOPEE_PARTNER_KEY", "")
 
 # 測試環境
 HOST = "https://partner.test-stable.shopeemobile.com"

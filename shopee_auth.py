@@ -1,4 +1,5 @@
 import hashlib
+import hmac
 import time
 
 from config import PARTNER_ID, PARTNER_KEY, HOST
@@ -11,18 +12,22 @@ def get_timestamp():
 
 def generate_sign(path: str, timestamp: int, access_token: str = "", shop_id: int = 0) -> str:
     """
-    產生 Shopee API 簽名
+    產生 Shopee API 簽名 (HMAC-SHA256)
     
     簽名規則（Shopee V2 API）：
-    - 授權相關: SHA256(partner_key + partner_id + path + timestamp)
-    - 商店相關: SHA256(partner_key + partner_id + path + timestamp + access_token + shop_id)
+    - 授權相關: HMAC-SHA256(partner_key, partner_id + path + timestamp)
+    - 商店相關: HMAC-SHA256(partner_key, partner_id + path + timestamp + access_token + shop_id)
     """
     if access_token and shop_id:
-        base_string = f"{PARTNER_KEY}{PARTNER_ID}{path}{timestamp}{access_token}{shop_id}"
+        base_string = f"{PARTNER_ID}{path}{timestamp}{access_token}{shop_id}"
     else:
-        base_string = f"{PARTNER_KEY}{PARTNER_ID}{path}{timestamp}"
+        base_string = f"{PARTNER_ID}{path}{timestamp}"
     
-    sign = hashlib.sha256(base_string.encode('utf-8')).hexdigest()
+    sign = hmac.new(
+        PARTNER_KEY.encode('utf-8'),
+        base_string.encode('utf-8'),
+        hashlib.sha256
+    ).hexdigest()
     
     return sign
 
@@ -30,9 +35,6 @@ def generate_sign(path: str, timestamp: int, access_token: str = "", shop_id: in
 def build_auth_url(redirect_url: str) -> str:
     """
     產生商店授權 URL
-    
-    用戶訪問這個 URL 後會被導向蝦皮登入頁面，
-    授權成功後會回調到 redirect_url
     """
     path = "/api/v2/shop/auth_partner"
     timestamp = get_timestamp()
@@ -68,7 +70,6 @@ def build_api_url(path: str, access_token: str = "", shop_id: int = 0, **params)
     if shop_id:
         url += f"&shop_id={shop_id}"
     
-    # 加入其他參數
     for key, value in params.items():
         url += f"&{key}={value}"
     
