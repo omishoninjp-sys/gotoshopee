@@ -101,6 +101,8 @@ def auth():
 @app.route("/callback")
 def callback():
     """處理授權回調"""
+    import json
+    
     code = request.args.get("code")
     shop_id = request.args.get("shop_id")
     
@@ -114,14 +116,6 @@ def callback():
     
     path = "/api/v2/auth/token/get"
     timestamp = get_timestamp()
-    base_string = f"{PARTNER_ID}{path}{timestamp}"
-    sign = hmac.new(
-        PARTNER_KEY.encode('utf-8'),
-        base_string.encode('utf-8'),
-        hashlib.sha256
-    ).hexdigest()
-    
-    url = f"{HOST}{path}?partner_id={PARTNER_ID}&timestamp={timestamp}&sign={sign}"
     
     body = {
         "code": code,
@@ -129,6 +123,27 @@ def callback():
         "partner_id": int(PARTNER_ID)
     }
     
+    # 將 body 轉成 JSON 字串（不含空格）
+    body_str = json.dumps(body, separators=(',', ':'))
+    
+    # 新的 base_string 格式：PartnerID + Path + Body + Timestamp
+    base_string_with_body = f"{PARTNER_ID}{path}{body_str}{timestamp}"
+    sign_with_body = hmac.new(
+        PARTNER_KEY.encode('utf-8'),
+        base_string_with_body.encode('utf-8'),
+        hashlib.sha256
+    ).hexdigest()
+    
+    # 舊的 base_string 格式（備用）
+    base_string_no_body = f"{PARTNER_ID}{path}{timestamp}"
+    sign_no_body = hmac.new(
+        PARTNER_KEY.encode('utf-8'),
+        base_string_no_body.encode('utf-8'),
+        hashlib.sha256
+    ).hexdigest()
+    
+    # 先嘗試新格式（帶 Body）
+    url = f"{HOST}{path}?partner_id={PARTNER_ID}&timestamp={timestamp}&sign={sign_with_body}"
     response = requests.post(url, json=body)
     data = response.json()
     
@@ -138,24 +153,31 @@ def callback():
         token_storage["shop_id"] = shop_id
         token_storage["expire_in"] = data.get("expire_in", 14400)
         return redirect("/?auth=success")
-    else:
-        # 顯示詳細的 debug 資訊
-        return jsonify({
-            "error": "Failed to get access token",
-            "response": data,
-            "debug": {
-                "partner_id": PARTNER_ID,
-                "partner_key_length": len(PARTNER_KEY),
-                "partner_key_first_8": PARTNER_KEY[:8] if len(PARTNER_KEY) > 8 else "N/A",
-                "timestamp": timestamp,
-                "path": path,
-                "base_string": base_string,
-                "sign": sign,
-                "url": url,
-                "body": body,
-                "host": HOST
+    
+    # 如果新格式失敗，顯示兩種格式的 debug 資訊
+    return jsonify({
+        "error": "Failed to get access token",
+        "response": data,
+        "debug": {
+            "partner_id": PARTNER_ID,
+            "partner_key_length": len(PARTNER_KEY),
+            "partner_key_first_8": PARTNER_KEY[:8] if len(PARTNER_KEY) > 8 else "N/A",
+            "timestamp": timestamp,
+            "path": path,
+            "body": body,
+            "body_str": body_str,
+            "host": HOST,
+            "試驗1_帶Body": {
+                "base_string": base_string_with_body,
+                "sign": sign_with_body,
+                "url": url
+            },
+            "試驗2_不帶Body": {
+                "base_string": base_string_no_body,
+                "sign": sign_no_body
             }
-        }), 400
+        }
+    }), 400
 
 
 @app.route("/refresh-token")
