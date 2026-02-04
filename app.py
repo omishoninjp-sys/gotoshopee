@@ -455,10 +455,13 @@ def sync_page():
                     const data = await res.json();
                     debug(data);
                     
-                    if (data.response && data.response.shop_name) {
-                        log('✅ 蝦皮連線成功: ' + data.response.shop_name, 'success');
-                        statusEl.innerHTML = '<div class="status-box status-success">✅ ' + data.response.shop_name + '<br><small>地區: ' + data.response.region + '</small></div>';
-                    } else if (data.error) {
+                    // 檢查兩種可能的回應格式
+                    const shopInfo = data.response || data;
+                    
+                    if (shopInfo.shop_name && shopInfo.error === '') {
+                        log('✅ 蝦皮連線成功: ' + shopInfo.shop_name, 'success');
+                        statusEl.innerHTML = '<div class="status-box status-success">✅ ' + shopInfo.shop_name + '<br><small>地區: ' + shopInfo.region + ' | 狀態: ' + shopInfo.status + '</small></div>';
+                    } else if (data.error && data.error !== '') {
                         log('❌ 蝦皮連線失敗: ' + (data.message || data.error), 'error');
                         statusEl.innerHTML = '<div class="status-box status-error">❌ ' + (data.message || data.error) + '</div>';
                     } else {
