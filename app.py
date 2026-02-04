@@ -866,7 +866,7 @@ def api_sync_collection():
         return jsonify({"success": False, "error": "Not authorized"})
     
     from shopify_api import ShopifyAPI
-    from shopee_product import upload_image, create_product, shopify_to_shopee_product
+    from shopee_product import upload_image, create_product, shopify_to_shopee_product, get_attributes, find_country_of_origin_attribute
     
     data = request.json
     collection_id = data.get("collection_id")
@@ -888,6 +888,28 @@ def api_sync_collection():
     results = []
     
     try:
+        # 0. 先查詢分類屬性，找到產地屬性
+        debug_info["steps"].append("Step 0: 查詢分類屬性")
+        attrs_result = get_attributes(
+            token_storage["access_token"],
+            token_storage["shop_id"],
+            category_id
+        )
+        
+        country_origin_attr = None
+        if attrs_result.get("success"):
+            attributes = attrs_result.get("attributes", [])
+            debug_info["attributes_count"] = len(attributes)
+            country_origin_attr = find_country_of_origin_attribute(attributes)
+            
+            if country_origin_attr:
+                debug_info["steps"].append(f"  ✅ 找到產地屬性 (ID: {country_origin_attr.get('attribute_id')})")
+                debug_info["country_origin_attr"] = country_origin_attr
+            else:
+                debug_info["steps"].append("  ⚠️ 未找到產地屬性，將嘗試不帶屬性創建")
+        else:
+            debug_info["steps"].append(f"  ⚠️ 查詢屬性失敗: {attrs_result.get('error')}")
+        
         # 1. 獲取 Shopify 商品
         debug_info["steps"].append("Step 1: 獲取 Shopify 商品")
         shopify = ShopifyAPI()
@@ -996,7 +1018,8 @@ def api_sync_collection():
                     product,
                     category_id,
                     image_ids,
-                    collection_title  # 傳遞系列名稱
+                    collection_title,  # 傳遞系列名稱
+                    country_origin_attr  # 傳遞產地屬性
                 )
                 
                 # 更新物流設定
@@ -1013,6 +1036,7 @@ def api_sync_collection():
                     "seller_stock": shopee_product_data.get("seller_stock"),
                     "category_id": shopee_product_data.get("category_id"),
                     "brand": shopee_product_data.get("brand"),
+                    "attribute_list": shopee_product_data.get("attribute_list"),
                     "image_count": len(image_ids),
                     "logistic_count": len(logistic_ids)
                 }

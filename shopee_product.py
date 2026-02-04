@@ -118,6 +118,33 @@ def get_attributes(access_token: str, shop_id: int, category_id: int, language: 
             "debug": debug_info
         }
 
+
+def find_country_of_origin_attribute(attributes: list):
+    """從屬性列表中找到產地屬性"""
+    country_keywords = ["country", "origin", "產地", "原產地"]
+    
+    for attr in attributes:
+        attr_name = (attr.get("original_attribute_name", "") + " " + attr.get("display_attribute_name", "")).lower()
+        if any(keyword in attr_name for keyword in country_keywords):
+            # 找到產地屬性，嘗試找「日本」的選項
+            attr_id = attr.get("attribute_id")
+            values = attr.get("attribute_value_list", [])
+            
+            japan_value_id = 0
+            for val in values:
+                val_name = (val.get("original_value_name", "") + " " + val.get("display_value_name", "")).lower()
+                if "japan" in val_name or "日本" in val_name:
+                    japan_value_id = val.get("value_id", 0)
+                    break
+            
+            return {
+                "attribute_id": attr_id,
+                "value_id": japan_value_id,
+                "original_value_name": "日本"
+            }
+    
+    return None
+
 def upload_image(access_token: str, shop_id: int, image_url: str):
     """上傳圖片到蝦皮 MediaSpace"""
     debug_info = {"step": "upload_image", "image_url": image_url}
@@ -231,7 +258,7 @@ def create_product(access_token: str, shop_id: int, product_data: dict):
             "debug": debug_info
         }
 
-def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids: list, collection_title: str = ""):
+def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids: list, collection_title: str = "", country_origin_attr: dict = None):
     """
     將 Shopify 商品轉換為蝦皮商品格式
     
@@ -240,6 +267,7 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
         category_id: 蝦皮分類 ID
         image_ids: 已上傳的圖片 ID 列表
         collection_title: Shopify 系列名稱（用於判斷預設庫存）
+        country_origin_attr: 產地屬性資訊 {"attribute_id": xxx, "value_id": xxx, "original_value_name": "日本"}
     """
     # 取得價格（從第一個 variant）
     variants = shopify_product.get("variants", [])
@@ -307,6 +335,20 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
             "original_brand_name": brand_name if brand_name else "No Brand"
         }
     }
+    
+    # 商品屬性（產地 = 日本）
+    if country_origin_attr:
+        shopee_product["attribute_list"] = [
+            {
+                "attribute_id": country_origin_attr.get("attribute_id"),
+                "attribute_value_list": [
+                    {
+                        "value_id": country_origin_attr.get("value_id", 0),
+                        "original_value_name": country_origin_attr.get("original_value_name", "日本")
+                    }
+                ]
+            }
+        ]
     
     return shopee_product
 
