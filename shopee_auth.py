@@ -1,5 +1,4 @@
 import hashlib
-import hmac
 import time
 
 from config import PARTNER_ID, PARTNER_KEY, HOST
@@ -14,20 +13,16 @@ def generate_sign(path: str, timestamp: int, access_token: str = "", shop_id: in
     """
     產生 Shopee API 簽名
     
-    簽名規則：
+    簽名規則（Shopee V2 API）：
     - 授權相關: SHA256(partner_key + partner_id + path + timestamp)
     - 商店相關: SHA256(partner_key + partner_id + path + timestamp + access_token + shop_id)
     """
     if access_token and shop_id:
-        base_string = f"{PARTNER_ID}{path}{timestamp}{access_token}{shop_id}"
+        base_string = f"{PARTNER_KEY}{PARTNER_ID}{path}{timestamp}{access_token}{shop_id}"
     else:
-        base_string = f"{PARTNER_ID}{path}{timestamp}"
+        base_string = f"{PARTNER_KEY}{PARTNER_ID}{path}{timestamp}"
     
-    sign = hmac.new(
-        PARTNER_KEY.encode('utf-8'),
-        base_string.encode('utf-8'),
-        hashlib.sha256
-    ).hexdigest()
+    sign = hashlib.sha256(base_string.encode('utf-8')).hexdigest()
     
     return sign
 
