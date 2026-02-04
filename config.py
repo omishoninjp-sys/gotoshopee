@@ -4,8 +4,10 @@ import os
 PARTNER_ID = os.environ.get("SHOPEE_PARTNER_ID", "1215936")
 PARTNER_KEY = os.environ.get("SHOPEE_PARTNER_KEY", "")
 
-# 測試環境
-HOST = "https://partner.test-stable.shopeemobile.com"
+# 測試環境 (2025-11-21 官方文件更新的新 URL)
+HOST = "https://openplatform.sandbox.test-stable.shopee.sg"
+# 舊的測試環境 URL（可能已棄用）
+# HOST = "https://partner.test-stable.shopeemobile.com"
 # 正式環境（之後再換）
 # HOST = "https://partner.shopeemobile.com"
 
