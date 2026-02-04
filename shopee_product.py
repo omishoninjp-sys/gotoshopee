@@ -231,9 +231,15 @@ def create_product(access_token: str, shop_id: int, product_data: dict):
             "debug": debug_info
         }
 
-def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids: list):
+def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids: list, collection_title: str = ""):
     """
     將 Shopify 商品轉換為蝦皮商品格式
+    
+    Args:
+        shopify_product: Shopify 商品資料
+        category_id: 蝦皮分類 ID
+        image_ids: 已上傳的圖片 ID 列表
+        collection_title: Shopify 系列名稱（用於判斷預設庫存）
     """
     # 取得價格（從第一個 variant）
     variants = shopify_product.get("variants", [])
@@ -245,9 +251,17 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
         first_variant = variants[0]
         price = float(first_variant.get("price", 0))
         stock = first_variant.get("inventory_quantity", 0)
-        if stock < 0:
-            stock = 10  # 如果庫存為負，設為預設值
         weight = float(first_variant.get("weight", 0.5)) or 0.5
+    
+    # 判斷預設庫存
+    # 伴手禮相關系列 → 900，其他 → 2
+    souvenir_keywords = ["伴手禮", "砂糖", "風月堂", "YOKUMOKU", "小倉山莊", "本高砂屋", "Francais", "餅乾", "糖果", "甜點", "禮盒"]
+    is_souvenir = any(keyword in collection_title for keyword in souvenir_keywords)
+    default_stock = 900 if is_souvenir else 2
+    
+    # 如果 Shopify 沒有設定庫存（0 或負數），使用預設值
+    if stock <= 0:
+        stock = default_stock
     
     # 處理描述（移除 HTML 標籤的簡單方法）
     description = shopify_product.get("body_html", "")
@@ -267,7 +281,8 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
         "original_price": price if price > 0 else 100,  # 最低價格
         "description": description,
         "item_name": shopify_product.get("title", "商品")[:120],  # 蝦皮標題上限 120 字
-        "normal_stock": stock if stock > 0 else 10,
+        "normal_stock": stock,
+        "seller_stock": [{"stock": stock}],  # 賣家庫存（必填）
         "category_id": category_id,
         "image": {
             "image_id_list": image_ids

@@ -728,6 +728,7 @@ def sync_page():
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                                 collection_id: col.id,
+                                collection_title: col.title,  // 傳遞系列名稱
                                 category_id: selectedCategoryId,
                                 logistic_ids: logistics,
                                 limit: 1  // 每個系列只同步 1 個
@@ -869,12 +870,14 @@ def api_sync_collection():
     
     data = request.json
     collection_id = data.get("collection_id")
+    collection_title = data.get("collection_title", "")  # 系列名稱
     category_id = data.get("category_id")
     logistic_ids = data.get("logistic_ids", [])
     limit = data.get("limit", 1)
     
     debug_info = {
         "collection_id": collection_id,
+        "collection_title": collection_title,
         "category_id": category_id,
         "logistic_ids": logistic_ids,
         "limit": limit,
@@ -992,7 +995,8 @@ def api_sync_collection():
                 shopee_product_data = shopify_to_shopee_product(
                     product,
                     category_id,
-                    image_ids
+                    image_ids,
+                    collection_title  # 傳遞系列名稱
                 )
                 
                 # 更新物流設定
@@ -1006,7 +1010,9 @@ def api_sync_collection():
                     "item_name": shopee_product_data.get("item_name"),
                     "original_price": shopee_product_data.get("original_price"),
                     "normal_stock": shopee_product_data.get("normal_stock"),
+                    "seller_stock": shopee_product_data.get("seller_stock"),
                     "category_id": shopee_product_data.get("category_id"),
+                    "brand": shopee_product_data.get("brand"),
                     "image_count": len(image_ids),
                     "logistic_count": len(logistic_ids)
                 }
