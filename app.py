@@ -15,20 +15,33 @@ token_storage = {}
 @app.route("/")
 def index():
     """首頁 - 顯示狀態和操作選項"""
-    html = """
+    
+    if token_storage.get("access_token"):
+        status_class = "connected"
+        status_text = f"已連接商店 (Shop ID: {token_storage.get('shop_id')})"
+        action_html = """
+        <a class="btn" href="/shop-info">查看商店資訊</a>
+        <a class="btn" href="/auth">重新授權</a>
+        """
+    else:
+        status_class = "disconnected"
+        status_text = "尚未授權"
+        action_html = '<a class="btn" href="/auth">連接蝦皮商店</a>'
+    
+    html = f"""
     <!DOCTYPE html>
     <html>
     <head>
         <title>Goyoutati Shopee Sync</title>
         <style>
-            body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
-            .btn { display: inline-block; padding: 10px 20px; background: #ee4d2d; color: white; 
-                   text-decoration: none; border-radius: 5px; margin: 10px 0; }
-            .btn:hover { background: #d73211; }
-            .status { padding: 15px; border-radius: 5px; margin: 20px 0; }
-            .connected { background: #d4edda; color: #155724; }
-            .disconnected { background: #f8d7da; color: #721c24; }
-            pre { background: #f5f5f5; padding: 15px; border-radius: 5px; overflow-x: auto; }
+            body {{ font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }}
+            .btn {{ display: inline-block; padding: 10px 20px; background: #ee4d2d; color: white; 
+                   text-decoration: none; border-radius: 5px; margin: 10px 0; }}
+            .btn:hover {{ background: #d73211; }}
+            .status {{ padding: 15px; border-radius: 5px; margin: 20px 0; }}
+            .connected {{ background: #d4edda; color: #155724; }}
+            .disconnected {{ background: #f8d7da; color: #721c24; }}
+            pre {{ background: #f5f5f5; padding: 15px; border-radius: 5px; overflow-x: auto; }}
         </style>
     </head>
     <body>
@@ -53,23 +66,7 @@ def index():
     </html>
     """
     
-    if token_storage.get("access_token"):
-        status_class = "connected"
-        status_text = f"已連接商店 (Shop ID: {token_storage.get('shop_id')})"
-        action_html = """
-        <a class="btn" href="/shop-info">查看商店資訊</a>
-        <a class="btn" href="/auth">重新授權</a>
-        """
-    else:
-        status_class = "disconnected"
-        status_text = "尚未授權"
-        action_html = '<a class="btn" href="/auth">連接蝦皮商店</a>'
-    
-    return html.format(
-        status_class=status_class,
-        status_text=status_text,
-        action_html=action_html
-    )
+    return html
 
 
 @app.route("/auth")
