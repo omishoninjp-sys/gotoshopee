@@ -337,7 +337,9 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
     }
     
     # 商品屬性（產地 = 日本）
+    # 不管有沒有查詢到屬性 ID，都強制加入產地
     if country_origin_attr:
+        # 使用查詢到的正確 ID
         shopee_product["attribute_list"] = [
             {
                 "attribute_id": country_origin_attr.get("attribute_id"),
@@ -345,6 +347,21 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
                     {
                         "value_id": country_origin_attr.get("value_id", 0),
                         "original_value_name": country_origin_attr.get("original_value_name", "日本")
+                    }
+                ]
+            }
+        ]
+    else:
+        # 沒有查詢到時，使用預設值（value_id=0 讓系統自動匹配）
+        # 蝦皮台灣 "Country of Origin" 常見 attribute_id: 100006, 100001, 100845
+        # 使用 original_value_name 讓系統自動匹配
+        shopee_product["attribute_list"] = [
+            {
+                "attribute_id": 100006,  # Country of Origin 常見 ID
+                "attribute_value_list": [
+                    {
+                        "value_id": 0,
+                        "original_value_name": "Japan"
                     }
                 ]
             }
