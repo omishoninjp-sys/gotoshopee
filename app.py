@@ -139,9 +139,22 @@ def callback():
         token_storage["expire_in"] = data.get("expire_in", 14400)
         return redirect("/?auth=success")
     else:
+        # 顯示詳細的 debug 資訊
         return jsonify({
             "error": "Failed to get access token",
-            "response": data
+            "response": data,
+            "debug": {
+                "partner_id": PARTNER_ID,
+                "partner_key_length": len(PARTNER_KEY),
+                "partner_key_first_8": PARTNER_KEY[:8] if len(PARTNER_KEY) > 8 else "N/A",
+                "timestamp": timestamp,
+                "path": path,
+                "base_string": base_string,
+                "sign": sign,
+                "url": url,
+                "body": body,
+                "host": HOST
+            }
         }), 400
 
 
