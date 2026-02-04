@@ -259,6 +259,9 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
     if not description:
         description = shopify_product.get("title", "商品描述")
     
+    # 從 Shopify vendor 取得品牌名稱，沒有的話用「無品牌」
+    brand_name = shopify_product.get("vendor", "")
+    
     # 建立蝦皮商品資料
     shopee_product = {
         "original_price": price if price > 0 else 100,  # 最低價格
@@ -282,7 +285,12 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
             }
         ],
         "condition": "NEW",
-        "item_status": "UNLIST"  # 先設為未上架，測試用
+        "item_status": "UNLIST",  # 先設為未上架，測試用
+        # 品牌資訊（必填）
+        "brand": {
+            "brand_id": 0,  # 0 = 無品牌/自訂品牌
+            "original_brand_name": brand_name if brand_name else "No Brand"
+        }
     }
     
     return shopee_product
