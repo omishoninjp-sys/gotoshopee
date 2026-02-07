@@ -336,39 +336,45 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
         }
     }
     
-    # 商品屬性（產地 = 日本）
-    # 不管有沒有查詢到屬性 ID，都強制加入產地
-    if country_origin_attr:
-        # 使用查詢到的正確 ID
-        shopee_product["attribute_list"] = [
-            {
-                "attribute_id": country_origin_attr.get("attribute_id"),
-                "attribute_value_list": [
-                    {
-                        "value_id": country_origin_attr.get("value_id", 0),
-                        "original_value_name": country_origin_attr.get("original_value_name", "日本")
-                    }
-                ]
-            }
+    # 商品屬性
+    # 正式環境需要更多必填屬性
+    shopee_product["attribute_list"] = [
+        {
+            "attribute_id": 200037,  # Region of Origin 產地
+            "attribute_value_list": [
+                {"value_id": 0, "original_value_name": "Japan"}
+            ]
+        },
+        {
+            "attribute_id": 201021,  # Pork Origin Region 豬肉產地
+            "attribute_value_list": [
+                {"value_id": 0, "original_value_name": "No Pork"}
+            ]
+        }
+    ]
+    
+    # 伴手禮系列需要更多食品標示屬性
+    if is_souvenir:
+        # 這些是台灣食品法規要求的欄位
+        food_attributes = [
+            {"attribute_id": 100268, "value": "Omishonin Co., Ltd."},  # Liable Company Name
+            {"attribute_id": 100269, "value": "New Ryogoku Heights 303, 1-28-4 Midori, Sumida-ku, Tokyo, 130-0021, Japan"},  # Liable Company Address
+            {"attribute_id": 100270, "value": "+81 0366593195"},  # Liable Company Tel
+            {"attribute_id": 100262, "value": "2 Months"},  # Shelf Life
+            {"attribute_id": 100264, "value": "詳見商品包裝"},  # Ingredient
+            {"attribute_id": 100265, "value": "詳見商品包裝"},  # Food Additives
+            {"attribute_id": 100266, "value": "詳見商品包裝"},  # Nutrition Facts
+            {"attribute_id": 100267, "value": "本產品不含基因改造成分"},  # GMO
+            {"attribute_id": 100271, "value": "詳見商品包裝"},  # Other Regulatory
         ]
-    else:
-        # 測試環境確認的屬性 ID（分類 300656 禮盒）
-        # - 200037: Region of Origin 產地
-        # - 201021: Pork Origin Region 豬肉產地
-        shopee_product["attribute_list"] = [
-            {
-                "attribute_id": 200037,  # Region of Origin 產地
+        
+        for attr in food_attributes:
+            shopee_product["attribute_list"].append({
+                "attribute_id": attr["attribute_id"],
                 "attribute_value_list": [
-                    {"value_id": 0, "original_value_name": "Japan"}
+                    {"value_id": 0, "original_value_name": attr["value"]}
                 ]
-            },
-            {
-                "attribute_id": 201021,  # Pork Origin Region 豬肉產地
-                "attribute_value_list": [
-                    {"value_id": 0, "original_value_name": "No Pork"}
-                ]
-            }
-        ]
+            })
     
     return shopee_product
 
