@@ -100,17 +100,26 @@ def get_collections():
         }
 
 def get_products_in_collection(collection_id, limit=1):
-    """取得 Collection 中的商品"""
+    """取得 Collection 中的商品（包含完整 variants 資料）"""
     debug_info = {"step": "get_products_in_collection", "collection_id": collection_id, "limit": limit}
     
     try:
-        url = f"{get_base_url()}/collections/{collection_id}/products.json?limit={limit}"
+        # 使用 /products.json?collection_id= 來獲取完整商品資料（包含 variants）
+        url = f"{get_base_url()}/products.json?collection_id={collection_id}&limit={limit}"
         response = requests.get(url, headers=get_headers(), timeout=30)
         debug_info["status_code"] = response.status_code
         
         if response.status_code == 200:
             products = response.json().get("products", [])
             debug_info["products_count"] = len(products)
+            # 記錄第一個商品的 variants 數量（debug 用）
+            if products:
+                debug_info["first_product_variants_count"] = len(products[0].get("variants", []))
+                if products[0].get("variants"):
+                    first_variant = products[0]["variants"][0]
+                    debug_info["first_variant_price"] = first_variant.get("price")
+                    debug_info["first_variant_weight"] = first_variant.get("weight")
+                    debug_info["first_variant_weight_unit"] = first_variant.get("weight_unit")
             return {
                 "success": True,
                 "products": products,

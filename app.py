@@ -353,6 +353,36 @@ def sync_page():
             </div>
         </div>
         
+        <!-- Step 4.5: 價格設定 -->
+        <div class="section">
+            <h3><span class="step-indicator">💰</span>價格設定</h3>
+            <p>計算公式：<strong>Shopify 價格 × 匯率 × 加成比例 = 台幣售價</strong></p>
+            <div style="display: flex; gap: 20px; align-items: center; flex-wrap: wrap;">
+                <div>
+                    <label><strong>匯率 (JPY → TWD)：</strong></label><br>
+                    <input type="number" id="exchange-rate" value="0.21" step="0.01" min="0.01" style="width: 100px;">
+                </div>
+                <div>
+                    <label><strong>加成比例：</strong></label><br>
+                    <input type="number" id="markup-rate" value="1.05" step="0.01" min="1" style="width: 100px;">
+                </div>
+                <div>
+                    <label><strong>範例計算：</strong></label><br>
+                    <span id="price-example">¥1,000 → NT$221</span>
+                </div>
+            </div>
+            <script>
+                function updatePriceExample() {
+                    const rate = parseFloat(document.getElementById('exchange-rate').value) || 0.21;
+                    const markup = parseFloat(document.getElementById('markup-rate').value) || 1.05;
+                    const example = Math.round(1000 * rate * markup);
+                    document.getElementById('price-example').textContent = '¥1,000 → NT$' + example;
+                }
+                document.getElementById('exchange-rate').addEventListener('input', updatePriceExample);
+                document.getElementById('markup-rate').addEventListener('input', updatePriceExample);
+            </script>
+        </div>
+        
         <!-- Step 5: 執行同步 -->
         <div class="section">
             <h3><span class="step-indicator">5</span>執行同步測試</h3>
@@ -701,6 +731,10 @@ def sync_page():
                     return;
                 }
                 
+                // 讀取價格設定
+                const exchangeRate = parseFloat(document.getElementById('exchange-rate').value) || 0.21;
+                const markupRate = parseFloat(document.getElementById('markup-rate').value) || 1.05;
+                
                 const btn = document.getElementById('sync-btn');
                 btn.disabled = true;
                 btn.textContent = '同步中...';
@@ -710,6 +744,7 @@ def sync_page():
                 log('========== 開始同步測試 ==========', 'info');
                 log('分類 ID: ' + selectedCategoryId, 'dim');
                 log('物流渠道: ' + logistics.join(', '), 'dim');
+                log('匯率: ' + exchangeRate + ' | 加成: ' + markupRate + ' (價格乘數: ' + (exchangeRate * markupRate).toFixed(4) + ')', 'dim');
                 log('系列數量: ' + collections.length, 'dim');
                 log('', 'info');
                 
@@ -728,10 +763,12 @@ def sync_page():
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                                 collection_id: col.id,
-                                collection_title: col.title,  // 傳遞系列名稱
+                                collection_title: col.title,
                                 category_id: selectedCategoryId,
                                 logistic_ids: logistics,
-                                limit: 1  // 每個系列只同步 1 個
+                                exchange_rate: exchangeRate,
+                                markup_rate: markupRate,
+                                limit: 1
                             })
                         });
                         
@@ -873,6 +910,8 @@ def api_sync_collection():
     collection_title = data.get("collection_title", "")  # 系列名稱
     category_id = data.get("category_id")
     logistic_ids = data.get("logistic_ids", [])
+    exchange_rate = data.get("exchange_rate", 0.21)  # 匯率
+    markup_rate = data.get("markup_rate", 1.05)  # 加成比例
     limit = data.get("limit", 1)
     
     debug_info = {
@@ -880,6 +919,8 @@ def api_sync_collection():
         "collection_title": collection_title,
         "category_id": category_id,
         "logistic_ids": logistic_ids,
+        "exchange_rate": exchange_rate,
+        "markup_rate": markup_rate,
         "limit": limit,
         "steps": [],
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
@@ -1019,7 +1060,9 @@ def api_sync_collection():
                     category_id,
                     image_ids,
                     collection_title,  # 傳遞系列名稱
-                    country_origin_attr  # 傳遞產地屬性
+                    country_origin_attr,  # 傳遞產地屬性
+                    exchange_rate,  # 匯率
+                    markup_rate  # 加成比例
                 )
                 
                 # 更新物流設定

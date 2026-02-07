@@ -99,12 +99,12 @@ class ShopifyAPI:
         return collections
     
     def get_products_in_collection(self, collection_id, limit=1):
-        """獲取某個系列中的商品"""
-        # 先獲取 collection 中的 product IDs
+        """獲取某個系列中的商品（包含完整 variants 資料）"""
+        # 使用 /products.json?collection_id= 來獲取完整商品資料（包含 variants）
         result = self._request(
             "GET", 
-            f"/collections/{collection_id}/products.json",
-            params={"limit": limit}
+            f"/products.json",
+            params={"collection_id": collection_id, "limit": limit}
         )
         return result
     

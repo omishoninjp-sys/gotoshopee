@@ -258,7 +258,7 @@ def create_product(access_token: str, shop_id: int, product_data: dict):
             "debug": debug_info
         }
 
-def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids: list, collection_title: str = "", country_origin_attr: dict = None):
+def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids: list, collection_title: str = "", country_origin_attr: dict = None, exchange_rate: float = 0.21, markup_rate: float = 1.05):
     """
     將 Shopify 商品轉換為蝦皮商品格式
     
@@ -268,6 +268,8 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
         image_ids: 已上傳的圖片 ID 列表
         collection_title: Shopify 系列名稱（用於判斷預設庫存）
         country_origin_attr: 產地屬性資訊 {"attribute_id": xxx, "value_id": xxx, "original_value_name": "日本"}
+        exchange_rate: 匯率 (JPY → TWD)，預設 0.21
+        markup_rate: 加成比例，預設 1.05
     """
     # 取得價格（從第一個 variant）
     variants = shopify_product.get("variants", [])
@@ -276,9 +278,9 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
     
     if variants:
         first_variant = variants[0]
-        # 價格：Shopify 日圓 → 台幣（匯率 0.21）
+        # 價格：Shopify 日圓 → 台幣（匯率 × 加成）
         shopify_price = float(first_variant.get("price", 0))
-        price = round(shopify_price * 0.21)  # 四捨五入到整數
+        price = round(shopify_price * exchange_rate * markup_rate)  # 四捨五入到整數
         
         # 重量：使用 Shopify 的重量（單位 kg）
         shopify_weight = float(first_variant.get("weight", 0) or 0)
