@@ -340,7 +340,8 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
             }
         ],
         "condition": "NEW",
-        "item_status": "UNLIST",  # 先設為未上架，測試用
+        "item_status": "NORMAL",  # 直接上架
+        "days_to_ship": 5,  # 備貨時間 5 天
         # 品牌資訊（必填）
         "brand": {
             "brand_id": 0,  # 0 = 無品牌/自訂品牌
