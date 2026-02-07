@@ -336,45 +336,88 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
         }
     }
     
-    # 商品屬性
-    # 正式環境需要更多必填屬性
+    # 商品屬性 - 正式環境 (分類 100656 禮盒)
+    # 所有伴手禮食品都需要這些必填屬性
     shopee_product["attribute_list"] = [
         {
-            "attribute_id": 200037,  # Region of Origin 產地
+            "attribute_id": 102384,  # Region of Origin (TW) 產地
             "attribute_value_list": [
                 {"value_id": 0, "original_value_name": "Japan"}
             ]
         },
         {
-            "attribute_id": 201021,  # Pork Origin Region 豬肉產地
+            "attribute_id": 101021,  # Pork Origin Region 豬肉產地
             "attribute_value_list": [
                 {"value_id": 0, "original_value_name": "No Pork"}
             ]
+        },
+        {
+            "attribute_id": 100975,  # Liable Company Name 負責廠商名稱
+            "attribute_value_list": [
+                {"value_id": 0, "original_value_name": "Omishonin Co., Ltd."}
+            ]
+        },
+        {
+            "attribute_id": 100976,  # Liable Company Address 負責廠商地址
+            "attribute_value_list": [
+                {"value_id": 0, "original_value_name": "New Ryogoku Heights 303, 1-28-4 Midori, Sumida-ku, Tokyo, 130-0021, Japan"}
+            ]
+        },
+        {
+            "attribute_id": 100977,  # Liable Company Tel No. 負責廠商電話
+            "attribute_value_list": [
+                {"value_id": 0, "original_value_name": "+81 0366593195"}
+            ]
+        },
+        {
+            "attribute_id": 100974,  # Ingredient 成分
+            "attribute_value_list": [
+                {"value_id": 0, "original_value_name": "詳見商品包裝"}
+            ]
+        },
+        {
+            "attribute_id": 100095,  # Weight 重量
+            "attribute_value_list": [
+                {"value_id": 0, "original_value_name": "500g"}
+            ]
+        },
+        {
+            "attribute_id": 100010,  # shelf lifes 保存期限
+            "attribute_value_list": [
+                {"value_id": 0, "original_value_name": "2 Months"}
+            ]
+        },
+        {
+            "attribute_id": 100999,  # Quantity 數量
+            "attribute_value_list": [
+                {"value_id": 0, "original_value_name": "1"}
+            ]
+        },
+        {
+            "attribute_id": 102564,  # Food Additives 食品添加物
+            "attribute_value_list": [
+                {"value_id": 0, "original_value_name": "詳見商品包裝"}
+            ]
+        },
+        {
+            "attribute_id": 102565,  # Nutrition Facts 營養標示
+            "attribute_value_list": [
+                {"value_id": 0, "original_value_name": "詳見商品包裝"}
+            ]
+        },
+        {
+            "attribute_id": 102566,  # GMO Indication 基改標示
+            "attribute_value_list": [
+                {"value_id": 0, "original_value_name": "本產品不含基因改造成分"}
+            ]
+        },
+        {
+            "attribute_id": 102567,  # Other Regulatory Requirements 其他法規
+            "attribute_value_list": [
+                {"value_id": 0, "original_value_name": "詳見商品包裝"}
+            ]
         }
     ]
-    
-    # 伴手禮系列需要更多食品標示屬性
-    if is_souvenir:
-        # 這些是台灣食品法規要求的欄位
-        food_attributes = [
-            {"attribute_id": 100268, "value": "Omishonin Co., Ltd."},  # Liable Company Name
-            {"attribute_id": 100269, "value": "New Ryogoku Heights 303, 1-28-4 Midori, Sumida-ku, Tokyo, 130-0021, Japan"},  # Liable Company Address
-            {"attribute_id": 100270, "value": "+81 0366593195"},  # Liable Company Tel
-            {"attribute_id": 100262, "value": "2 Months"},  # Shelf Life
-            {"attribute_id": 100264, "value": "詳見商品包裝"},  # Ingredient
-            {"attribute_id": 100265, "value": "詳見商品包裝"},  # Food Additives
-            {"attribute_id": 100266, "value": "詳見商品包裝"},  # Nutrition Facts
-            {"attribute_id": 100267, "value": "本產品不含基因改造成分"},  # GMO
-            {"attribute_id": 100271, "value": "詳見商品包裝"},  # Other Regulatory
-        ]
-        
-        for attr in food_attributes:
-            shopee_product["attribute_list"].append({
-                "attribute_id": attr["attribute_id"],
-                "attribute_value_list": [
-                    {"value_id": 0, "original_value_name": attr["value"]}
-                ]
-            })
     
     return shopee_product
 
