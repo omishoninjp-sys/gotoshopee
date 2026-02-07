@@ -1,15 +1,13 @@
 import os
 
 # Shopee API 設定
-PARTNER_ID = os.environ.get("SHOPEE_PARTNER_ID", "1215936")
+PARTNER_ID = os.environ.get("SHOPEE_PARTNER_ID", "2015134")
 PARTNER_KEY = os.environ.get("SHOPEE_PARTNER_KEY", "")
 
-# 測試環境 (2025-11-21 官方文件更新的新 URL)
-HOST = "https://openplatform.sandbox.test-stable.shopee.sg"
-# 舊的測試環境 URL（可能已棄用）
-# HOST = "https://partner.test-stable.shopeemobile.com"
-# 正式環境（之後再換）
-# HOST = "https://partner.shopeemobile.com"
+# 正式環境
+HOST = "https://partner.shopeemobile.com"
+# 測試環境（備用）
+# HOST = "https://openplatform.sandbox.test-stable.shopee.sg"
 
 # 授權回調網址
 REDIRECT_URL = os.environ.get("REDIRECT_URL", "https://gotoshopee.zeabur.app/callback")
