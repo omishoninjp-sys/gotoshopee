@@ -337,20 +337,34 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
     }
     
     # 商品屬性 - 正式環境 (分類 100656 禮盒)
-    # 所有伴手禮食品都需要這些必填屬性
+    # 下拉選單屬性必須使用 value_id，文字輸入屬性使用 original_value_name
     shopee_product["attribute_list"] = [
+        # ===== 下拉選單屬性（必須用 value_id）=====
         {
             "attribute_id": 102384,  # Region of Origin (TW) 產地
             "attribute_value_list": [
-                {"value_id": 0, "original_value_name": "Japan"}
+                {"value_id": 17007}  # Japan
             ]
         },
         {
             "attribute_id": 101021,  # Pork Origin Region 豬肉產地
             "attribute_value_list": [
-                {"value_id": 0, "original_value_name": "No Pork"}
+                {"value_id": 5549}  # No Pork
             ]
         },
+        {
+            "attribute_id": 100095,  # Weight 重量
+            "attribute_value_list": [
+                {"value_id": 613}  # 500g
+            ]
+        },
+        {
+            "attribute_id": 100010,  # shelf lifes 保存期限
+            "attribute_value_list": [
+                {"value_id": 568}  # 2 Months
+            ]
+        },
+        # ===== 文字輸入屬性（使用 original_value_name）=====
         {
             "attribute_id": 100975,  # Liable Company Name 負責廠商名稱
             "attribute_value_list": [
@@ -373,18 +387,6 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
             "attribute_id": 100974,  # Ingredient 成分
             "attribute_value_list": [
                 {"value_id": 0, "original_value_name": "詳見商品包裝"}
-            ]
-        },
-        {
-            "attribute_id": 100095,  # Weight 重量
-            "attribute_value_list": [
-                {"value_id": 0, "original_value_name": "500g"}
-            ]
-        },
-        {
-            "attribute_id": 100010,  # shelf lifes 保存期限
-            "attribute_value_list": [
-                {"value_id": 0, "original_value_name": "2 Months"}
             ]
         },
         {
