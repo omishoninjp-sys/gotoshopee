@@ -272,24 +272,34 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
     # 取得價格（從第一個 variant）
     variants = shopify_product.get("variants", [])
     price = 0
-    stock = 0
     weight = 0.5  # 預設重量 0.5kg
     
     if variants:
         first_variant = variants[0]
-        price = float(first_variant.get("price", 0))
-        stock = first_variant.get("inventory_quantity", 0)
-        weight = float(first_variant.get("weight", 0.5)) or 0.5
+        # 價格：Shopify 日圓 → 台幣（匯率 0.21）
+        shopify_price = float(first_variant.get("price", 0))
+        price = round(shopify_price * 0.21)  # 四捨五入到整數
+        
+        # 重量：使用 Shopify 的重量（單位 kg）
+        shopify_weight = float(first_variant.get("weight", 0) or 0)
+        weight_unit = first_variant.get("weight_unit", "kg")
+        
+        # 轉換重量單位到 kg
+        if weight_unit == "g":
+            weight = shopify_weight / 1000
+        elif weight_unit == "lb":
+            weight = shopify_weight * 0.453592
+        elif weight_unit == "oz":
+            weight = shopify_weight * 0.0283495
+        else:  # kg 或其他
+            weight = shopify_weight
+        
+        # 確保重量至少 0.1kg（蝦皮最小值）
+        if weight < 0.1:
+            weight = 0.1
     
-    # 判斷預設庫存
-    # 伴手禮相關系列 → 900，其他 → 2
-    souvenir_keywords = ["伴手禮", "砂糖", "風月堂", "YOKUMOKU", "小倉山莊", "本高砂屋", "Francais", "餅乾", "糖果", "甜點", "禮盒"]
-    is_souvenir = any(keyword in collection_title for keyword in souvenir_keywords)
-    default_stock = 900 if is_souvenir else 2
-    
-    # 如果 Shopify 沒有設定庫存（0 或負數），使用預設值
-    if stock <= 0:
-        stock = default_stock
+    # 庫存：統一設為 900
+    stock = 900
     
     # 處理描述（移除 HTML 標籤的簡單方法）
     description = shopify_product.get("body_html", "")
@@ -306,7 +316,7 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
     
     # 建立蝦皮商品資料
     shopee_product = {
-        "original_price": price if price > 0 else 100,  # 最低價格
+        "original_price": price if price >= 10 else 100,  # 最低價格 10 台幣，沒價格則設 100
         "description": description,
         "item_name": shopify_product.get("title", "商品")[:120],  # 蝦皮標題上限 120 字
         "normal_stock": stock,
@@ -315,7 +325,7 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
         "image": {
             "image_id_list": image_ids
         },
-        "weight": weight,
+        "weight": round(weight, 2),  # 重量保留兩位小數
         "dimension": {
             "package_length": 10,
             "package_width": 10,
