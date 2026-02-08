@@ -734,8 +734,8 @@ def sync_page():
                 const limit = defaultLimit || parseInt(document.getElementById('sync-limit').value) || 250;
                 const isTestMode = (limit === 1);
                 
-                // 每批處理的商品數量（避免超時）
-                const batchSize = 5;
+                // 每批處理的商品數量（避免超時，每個商品需上傳多張圖片）
+                const batchSize = 1;
                 
                 // 驗證
                 if (!selectedCategoryId) {
@@ -791,17 +791,16 @@ def sync_page():
                     
                     log('[' + (i+1) + '/' + collections.length + '] 處理系列: ' + col.title, 'info');
                     
-                    // 分批處理
+                    // 系列級別的計數器
+                    let seriesSuccess = 0;
+                    let seriesFail = 0;
+                    
+                    // 分批處理（每批 1 個商品）
                     let offset = 0;
-                    let batchNum = 1;
                     let hasMore = true;
                     
                     while (hasMore && offset < limit) {
                         const currentBatchSize = Math.min(batchSize, limit - offset);
-                        
-                        if (!isTestMode) {
-                            log('    📦 第 ' + batchNum + ' 批 (offset: ' + offset + ', size: ' + currentBatchSize + ')', 'dim');
-                        }
                         
                         try {
                             const res = await fetch('/api/sync/collection', {
@@ -829,43 +828,43 @@ def sync_page():
                                 
                                 totalSuccess += successItems.length;
                                 totalFail += failItems.length;
+                                seriesSuccess += successItems.length;
+                                seriesFail += failItems.length;
                                 
-                                if (successItems.length > 0) {
-                                    log('    ✅ 成功 ' + successItems.length + ' 個', 'success');
-                                    successItems.forEach(function(r) {
-                                        log('       • ' + r.title + ' (ID: ' + r.shopee_item_id + ')', 'dim');
-                                    });
-                                }
+                                successItems.forEach(function(r) {
+                                    log('  ✅ ' + r.title + ' (ID: ' + r.shopee_item_id + ')', 'success');
+                                });
                                 
-                                if (failItems.length > 0) {
-                                    log('    ❌ 失敗 ' + failItems.length + ' 個', 'error');
-                                    failItems.forEach(function(r) {
-                                        log('       • ' + r.title + ': ' + r.error, 'dim');
-                                    });
-                                }
+                                failItems.forEach(function(r) {
+                                    log('  ❌ ' + r.title + ': ' + r.error, 'error');
+                                });
                                 
                                 // 如果返回的商品數量少於請求的，表示沒有更多了
                                 if (results.length < currentBatchSize) {
                                     hasMore = false;
                                 }
+                            } else if (data.results && data.results.length === 0) {
+                                // 沒有更多商品
+                                hasMore = false;
                             } else {
-                                log('    ❌ 批次失敗: ' + (data.error || 'Unknown error'), 'error');
-                                hasMore = false;  // 出錯就停止這個系列
+                                log('  ❌ 失敗: ' + (data.error || 'Unknown error'), 'error');
+                                hasMore = false;
                             }
                             
                         } catch (e) {
-                            log('    ❌ 請求錯誤: ' + e.message, 'error');
-                            hasMore = false;  // 出錯就停止這個系列
+                            log('  ❌ 請求錯誤: ' + e.message, 'error');
+                            hasMore = false;
                         }
                         
                         offset += currentBatchSize;
-                        batchNum++;
                         
                         // 批次間延遲
                         if (hasMore) {
                             await new Promise(function(r) { setTimeout(r, 500); });
                         }
                     }
+                    
+                    log('  📊 系列小計: 成功 ' + seriesSuccess + ' / 失敗 ' + seriesFail, 'dim');
                     
                     log('', 'info');
                     
