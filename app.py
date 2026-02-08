@@ -395,6 +395,9 @@ def sync_page():
                 <button class="btn btn-success" onclick="startSync(250)" id="sync-btn" style="font-size: 16px; padding: 15px 30px;">
                     🚀 全部上架
                 </button>
+                <button class="btn btn-warning" onclick="updatePrices()" id="price-btn" style="font-size: 14px; padding: 12px 20px;">
+                    💰 更新價格
+                </button>
                 <div>
                     <label>每系列上限：</label>
                     <input type="number" id="sync-limit" value="250" min="1" max="250" style="width: 70px;">
@@ -403,7 +406,8 @@ def sync_page():
             
             <p style="margin-top: 10px;">
                 <small>🧪 測試同步：每個系列只同步 1 個商品（用於測試）</small><br>
-                <small>🚀 全部上架：同步所有選中系列的全部商品（直接上架）</small>
+                <small>🚀 全部上架：同步所有選中系列的全部商品（新商品上架，已存在商品自動更新價格）</small><br>
+                <small>💰 更新價格：只更新選中系列已存在商品的價格（不會新增商品）</small>
             </p>
             
             <div id="sync-progress" style="display:none;">
@@ -823,17 +827,22 @@ def sync_page():
                             
                             if (data.success && data.results) {
                                 const results = data.results;
-                                const successItems = results.filter(r => r.success && !r.skipped);
+                                const successItems = results.filter(r => r.success && !r.skipped && !r.price_updated);
+                                const priceUpdatedItems = results.filter(r => r.success && r.price_updated);
                                 const skippedItems = results.filter(r => r.success && r.skipped);
                                 const failItems = results.filter(r => !r.success);
                                 
-                                totalSuccess += successItems.length;
+                                totalSuccess += successItems.length + priceUpdatedItems.length;
                                 totalFail += failItems.length;
-                                seriesSuccess += successItems.length + skippedItems.length;
+                                seriesSuccess += successItems.length + priceUpdatedItems.length + skippedItems.length;
                                 seriesFail += failItems.length;
                                 
                                 successItems.forEach(function(r) {
                                     log('  ✅ ' + r.title + ' (ID: ' + r.shopee_item_id + ')', 'success');
+                                });
+                                
+                                priceUpdatedItems.forEach(function(r) {
+                                    log('  💰 ' + r.title + ' (ID: ' + r.shopee_item_id + ') 價格已更新', 'info');
                                 });
                                 
                                 skippedItems.forEach(function(r) {
@@ -882,7 +891,117 @@ def sync_page():
                 
                 testBtn.disabled = false;
                 syncBtn.disabled = false;
+                document.getElementById('price-btn').disabled = false;
                 syncBtn.textContent = '🚀 全部上架';
+                updateProgress(collections.length, collections.length, '完成！');
+            }
+            
+            // ====== 更新價格功能 ======
+            async function updatePrices() {
+                const collections = getSelectedCollections();
+                const logistics = getSelectedLogistics();
+                
+                // 驗證
+                if (!selectedCategoryId) {
+                    alert('請先選擇蝦皮分類！');
+                    return;
+                }
+                
+                if (collections.length === 0) {
+                    alert('請先選擇要更新價格的系列！');
+                    return;
+                }
+                
+                const confirmMsg = '確定要更新 ' + collections.length + ' 個系列的商品價格？\\n\\n這會比對 Shopify 和蝦皮的商品，更新已存在商品的價格。';
+                if (!confirm(confirmMsg)) {
+                    return;
+                }
+                
+                // 讀取價格設定
+                const exchangeRate = parseFloat(document.getElementById('exchange-rate').value) || 0.21;
+                const markupRate = parseFloat(document.getElementById('markup-rate').value) || 1.05;
+                
+                const testBtn = document.getElementById('test-btn');
+                const syncBtn = document.getElementById('sync-btn');
+                const priceBtn = document.getElementById('price-btn');
+                testBtn.disabled = true;
+                syncBtn.disabled = true;
+                priceBtn.disabled = true;
+                priceBtn.textContent = '更新中...';
+                
+                document.getElementById('sync-progress').style.display = 'block';
+                
+                log('========== 開始更新價格 ==========', 'info');
+                log('匯率: ' + exchangeRate + ' | 加成: ' + markupRate + ' (價格乘數: ' + (exchangeRate * markupRate).toFixed(4) + ')', 'dim');
+                log('系列數量: ' + collections.length, 'dim');
+                log('', 'info');
+                
+                let totalUpdated = 0;
+                let totalSkipped = 0;
+                let totalFail = 0;
+                
+                for (let i = 0; i < collections.length; i++) {
+                    const col = collections[i];
+                    updateProgress(i + 1, collections.length, '處理中: ' + col.title);
+                    
+                    log('[' + (i+1) + '/' + collections.length + '] 處理系列: ' + col.title, 'info');
+                    
+                    try {
+                        const res = await fetch('/api/sync/update-prices', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                collection_id: col.id,
+                                collection_title: col.title,
+                                exchange_rate: exchangeRate,
+                                markup_rate: markupRate
+                            })
+                        });
+                        
+                        const data = await res.json();
+                        debug(data);
+                        
+                        if (data.success && data.results) {
+                            const results = data.results;
+                            
+                            results.forEach(function(r) {
+                                if (r.updated) {
+                                    totalUpdated++;
+                                    log('  💰 ' + r.title + ' (ID: ' + r.shopee_item_id + ') ' + r.old_price + ' → ' + r.new_price, 'success');
+                                } else if (r.skipped) {
+                                    totalSkipped++;
+                                    log('  ⏭️ ' + r.title + ' (價格相同，跳過)', 'dim');
+                                } else if (r.not_found) {
+                                    totalSkipped++;
+                                    log('  ⚠️ ' + r.title + ' (蝦皮找不到此商品)', 'warning');
+                                } else if (r.error) {
+                                    totalFail++;
+                                    log('  ❌ ' + r.title + ': ' + r.error, 'error');
+                                }
+                            });
+                            
+                            log('  📊 系列小計: 更新 ' + results.filter(r => r.updated).length + ' / 跳過 ' + results.filter(r => r.skipped || r.not_found).length, 'dim');
+                        } else {
+                            log('  ❌ 失敗: ' + (data.error || 'Unknown error'), 'error');
+                        }
+                        
+                    } catch (e) {
+                        log('  ❌ 請求錯誤: ' + e.message, 'error');
+                    }
+                    
+                    log('', 'info');
+                    
+                    // 系列間延遲
+                    await new Promise(function(r) { setTimeout(r, 1000); });
+                }
+                
+                log('========== 價格更新完成 ==========', 'info');
+                log('總計更新: ' + totalUpdated + ' / 跳過: ' + totalSkipped + ' / 失敗: ' + totalFail, totalUpdated > 0 ? 'success' : 'warning');
+                
+                testBtn.disabled = false;
+                syncBtn.disabled = false;
+                priceBtn.disabled = false;
+                priceBtn.textContent = '💰 更新價格';
                 updateProgress(collections.length, collections.length, '完成！');
             }
         </script>
@@ -1192,10 +1311,79 @@ def api_sync_collection():
                     
                     # 檢查是否為重複商品
                     if "duplicate" in error_msg.lower() or "duplicated" in error_msg.lower():
-                        product_result["success"] = True  # 視為成功（已存在）
-                        product_result["shopee_item_id"] = "已存在"
-                        product_result["skipped"] = True
-                        debug_info["steps"].append(f"  ⏭️ 商品已存在，跳過")
+                        # 嘗試更新價格
+                        from shopee_product import update_price, get_item_list, get_item_base_info
+                        
+                        new_price = shopee_product_data.get("original_price", 0)
+                        item_name = shopee_product_data.get("item_name", "")
+                        
+                        debug_info["steps"].append(f"  🔄 商品已存在，嘗試更新價格...")
+                        
+                        # 嘗試找到現有商品的 item_id
+                        found_item_id = None
+                        
+                        # 搜尋現有商品（用快取或重新取得）
+                        if 'shopee_items_cache' not in debug_info:
+                            # 取得所有蝦皮商品
+                            items_result = get_item_list(
+                                token_storage["access_token"],
+                                token_storage["shop_id"],
+                                offset=0,
+                                page_size=100
+                            )
+                            if items_result.get("success"):
+                                item_ids = [i.get("item_id") for i in items_result.get("items", [])]
+                                if item_ids:
+                                    # 取得商品詳細資訊
+                                    info_result = get_item_base_info(
+                                        token_storage["access_token"],
+                                        token_storage["shop_id"],
+                                        item_ids[:50]  # API 限制 50 個
+                                    )
+                                    if info_result.get("success"):
+                                        debug_info['shopee_items_cache'] = info_result.get("items", [])
+                        
+                        # 在快取中搜尋匹配的商品
+                        cached_items = debug_info.get('shopee_items_cache', [])
+                        for cached_item in cached_items:
+                            cached_name = cached_item.get("item_name", "")
+                            # 比對名稱（可能有細微差異，用包含關係）
+                            original_title = product.get("title", "")
+                            if original_title in cached_name or cached_name in item_name:
+                                found_item_id = cached_item.get("item_id")
+                                old_price = cached_item.get("price_info", [{}])[0].get("original_price", 0)
+                                product_debug["found_existing_item"] = {
+                                    "item_id": found_item_id,
+                                    "old_price": old_price,
+                                    "new_price": new_price
+                                }
+                                break
+                        
+                        if found_item_id:
+                            # 更新價格
+                            update_result = update_price(
+                                token_storage["access_token"],
+                                token_storage["shop_id"],
+                                found_item_id,
+                                new_price
+                            )
+                            
+                            if update_result.get("success"):
+                                product_result["success"] = True
+                                product_result["shopee_item_id"] = found_item_id
+                                product_result["price_updated"] = True
+                                debug_info["steps"].append(f"  💰 價格更新成功！Item ID: {found_item_id}, 新價格: {new_price}")
+                            else:
+                                product_result["success"] = True  # 商品存在，只是價格更新失敗
+                                product_result["shopee_item_id"] = found_item_id
+                                product_result["skipped"] = True
+                                debug_info["steps"].append(f"  ⚠️ 價格更新失敗: {update_result.get('error')}")
+                        else:
+                            # 找不到現有商品，標記為跳過
+                            product_result["success"] = True
+                            product_result["shopee_item_id"] = "已存在"
+                            product_result["skipped"] = True
+                            debug_info["steps"].append(f"  ⏭️ 商品已存在但無法匹配，跳過")
                     else:
                         product_result["error"] = error_msg
                         debug_info["steps"].append(f"  ❌ 創建失敗: {error_msg}")
@@ -1229,6 +1417,178 @@ def api_sync_collection():
     except Exception as e:
         import traceback
         debug_info["exception"] = str(e)
+        debug_info["traceback"] = traceback.format_exc()
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "debug": debug_info
+        })
+
+
+@app.route("/api/sync/update-prices", methods=["POST"])
+def api_update_prices():
+    """只更新價格（不新增商品）"""
+    if not token_storage.get("access_token"):
+        return jsonify({"success": False, "error": "Not authorized"})
+    
+    from shopify_api import ShopifyAPI
+    from shopee_product import get_item_list, get_item_base_info, update_price
+    
+    data = request.json
+    collection_id = data.get("collection_id")
+    collection_title = data.get("collection_title", "")
+    exchange_rate = data.get("exchange_rate", 0.21)
+    markup_rate = data.get("markup_rate", 1.05)
+    
+    debug_info = {
+        "collection_id": collection_id,
+        "collection_title": collection_title,
+        "exchange_rate": exchange_rate,
+        "markup_rate": markup_rate,
+        "steps": [],
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
+    }
+    
+    results = []
+    
+    try:
+        # 1. 取得蝦皮所有商品
+        debug_info["steps"].append("Step 1: 取得蝦皮商品列表")
+        
+        shopee_items = []
+        offset = 0
+        while True:
+            items_result = get_item_list(
+                token_storage["access_token"],
+                token_storage["shop_id"],
+                offset=offset,
+                page_size=100
+            )
+            if not items_result.get("success"):
+                debug_info["steps"].append(f"  ⚠️ 取得商品列表失敗: {items_result.get('error')}")
+                break
+            
+            item_ids = [i.get("item_id") for i in items_result.get("items", [])]
+            if item_ids:
+                # 取得商品詳細資訊（包含名稱和價格）
+                info_result = get_item_base_info(
+                    token_storage["access_token"],
+                    token_storage["shop_id"],
+                    item_ids[:50]
+                )
+                if info_result.get("success"):
+                    shopee_items.extend(info_result.get("items", []))
+            
+            if not items_result.get("has_next"):
+                break
+            offset += 100
+            
+            # 安全限制
+            if offset > 1000:
+                break
+        
+        debug_info["shopee_items_count"] = len(shopee_items)
+        debug_info["steps"].append(f"  ✅ 取得 {len(shopee_items)} 個蝦皮商品")
+        
+        # 建立名稱 → 商品的對照表
+        shopee_name_map = {}
+        for item in shopee_items:
+            item_name = item.get("item_name", "")
+            # 去掉前綴後比對
+            clean_name = item_name.replace("日本代購 日本直送 GOYOUTATI ", "").strip()
+            shopee_name_map[clean_name] = item
+            shopee_name_map[item_name] = item  # 也保留完整名稱
+        
+        # 2. 取得 Shopify 商品
+        debug_info["steps"].append("Step 2: 取得 Shopify 商品")
+        shopify = ShopifyAPI()
+        products_result = shopify.get_products_in_collection(collection_id, limit=250)
+        
+        if not products_result.get("success"):
+            return jsonify({
+                "success": False,
+                "error": f"無法取得 Shopify 商品: {products_result.get('error')}",
+                "debug": debug_info
+            })
+        
+        products = products_result.get("data", {}).get("products", [])
+        debug_info["shopify_products_count"] = len(products)
+        debug_info["steps"].append(f"  ✅ 取得 {len(products)} 個 Shopify 商品")
+        
+        # 3. 比對並更新價格
+        debug_info["steps"].append("Step 3: 比對並更新價格")
+        
+        for product in products:
+            shopify_title = product.get("title", "")
+            variants = product.get("variants", [])
+            
+            # 計算新價格
+            new_price = 100
+            if variants:
+                shopify_price = float(variants[0].get("price", 0))
+                new_price = round(shopify_price * exchange_rate * markup_rate)
+            
+            result = {
+                "shopify_id": product.get("id"),
+                "title": shopify_title,
+                "new_price": new_price
+            }
+            
+            # 在蝦皮商品中搜尋
+            shopee_item = shopee_name_map.get(shopify_title)
+            
+            if not shopee_item:
+                # 嘗試模糊比對
+                for name, item in shopee_name_map.items():
+                    if shopify_title in name or name in shopify_title:
+                        shopee_item = item
+                        break
+            
+            if shopee_item:
+                item_id = shopee_item.get("item_id")
+                price_info = shopee_item.get("price_info", [{}])
+                old_price = price_info[0].get("original_price", 0) if price_info else 0
+                
+                result["shopee_item_id"] = item_id
+                result["old_price"] = old_price
+                
+                # 檢查價格是否需要更新
+                if abs(float(old_price) - float(new_price)) < 1:
+                    result["skipped"] = True
+                    result["reason"] = "價格相同"
+                else:
+                    # 更新價格
+                    update_result = update_price(
+                        token_storage["access_token"],
+                        token_storage["shop_id"],
+                        item_id,
+                        new_price
+                    )
+                    
+                    if update_result.get("success"):
+                        result["updated"] = True
+                    else:
+                        result["error"] = update_result.get("error")
+            else:
+                result["not_found"] = True
+            
+            results.append(result)
+        
+        return jsonify({
+            "success": True,
+            "results": results,
+            "summary": {
+                "total": len(results),
+                "updated": len([r for r in results if r.get("updated")]),
+                "skipped": len([r for r in results if r.get("skipped")]),
+                "not_found": len([r for r in results if r.get("not_found")]),
+                "failed": len([r for r in results if r.get("error")])
+            },
+            "debug": debug_info
+        })
+        
+    except Exception as e:
+        import traceback
         debug_info["traceback"] = traceback.format_exc()
         return jsonify({
             "success": False,

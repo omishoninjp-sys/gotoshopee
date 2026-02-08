@@ -486,3 +486,188 @@ def get_logistics(access_token: str, shop_id: int):
             "logistics": [],
             "debug": debug_info
         }
+
+
+def get_item_list(access_token: str, shop_id: int, offset: int = 0, page_size: int = 100, item_status: str = "NORMAL"):
+    """
+    取得蝦皮商品列表
+    item_status: NORMAL, BANNED, DELETED, UNLIST
+    """
+    debug_info = {"step": "get_item_list", "offset": offset, "page_size": page_size}
+    
+    try:
+        path = "/api/v2/product/get_item_list"
+        timestamp = get_timestamp()
+        sign = generate_shop_sign(path, timestamp, access_token, shop_id)
+        
+        url = f"{HOST}{path}?partner_id={PARTNER_ID}&timestamp={timestamp}&access_token={access_token}&shop_id={shop_id}&sign={sign}"
+        url += f"&offset={offset}&page_size={page_size}&item_status={item_status}"
+        
+        debug_info["url"] = url
+        
+        response = requests.get(url, timeout=30)
+        debug_info["status_code"] = response.status_code
+        
+        data = response.json()
+        debug_info["error"] = data.get("error", "")
+        
+        if data.get("error") == "":
+            items = data.get("response", {}).get("item", [])
+            has_next = data.get("response", {}).get("has_next_page", False)
+            total = data.get("response", {}).get("total_count", 0)
+            debug_info["items_count"] = len(items)
+            return {
+                "success": True,
+                "items": items,
+                "has_next": has_next,
+                "total": total,
+                "debug": debug_info
+            }
+        else:
+            return {
+                "success": False,
+                "error": data.get("message", data.get("error")),
+                "items": [],
+                "debug": debug_info
+            }
+    except Exception as e:
+        debug_info["exception"] = str(e)
+        return {
+            "success": False,
+            "error": str(e),
+            "items": [],
+            "debug": debug_info
+        }
+
+
+def get_item_base_info(access_token: str, shop_id: int, item_id_list: list):
+    """
+    取得商品基本資訊（包含價格）
+    item_id_list: 最多 50 個 item_id
+    """
+    debug_info = {"step": "get_item_base_info", "item_count": len(item_id_list)}
+    
+    try:
+        path = "/api/v2/product/get_item_base_info"
+        timestamp = get_timestamp()
+        sign = generate_shop_sign(path, timestamp, access_token, shop_id)
+        
+        # item_id_list 要用逗號分隔
+        item_ids_str = ",".join(str(i) for i in item_id_list)
+        
+        url = f"{HOST}{path}?partner_id={PARTNER_ID}&timestamp={timestamp}&access_token={access_token}&shop_id={shop_id}&sign={sign}"
+        url += f"&item_id_list={item_ids_str}"
+        
+        debug_info["url"] = url
+        
+        response = requests.get(url, timeout=30)
+        debug_info["status_code"] = response.status_code
+        
+        data = response.json()
+        debug_info["error"] = data.get("error", "")
+        
+        if data.get("error") == "":
+            items = data.get("response", {}).get("item_list", [])
+            debug_info["items_returned"] = len(items)
+            return {
+                "success": True,
+                "items": items,
+                "debug": debug_info
+            }
+        else:
+            return {
+                "success": False,
+                "error": data.get("message", data.get("error")),
+                "items": [],
+                "debug": debug_info
+            }
+    except Exception as e:
+        debug_info["exception"] = str(e)
+        return {
+            "success": False,
+            "error": str(e),
+            "items": [],
+            "debug": debug_info
+        }
+
+
+def update_price(access_token: str, shop_id: int, item_id: int, price: float):
+    """
+    更新商品價格
+    """
+    debug_info = {"step": "update_price", "item_id": item_id, "new_price": price}
+    
+    try:
+        path = "/api/v2/product/update_price"
+        timestamp = get_timestamp()
+        sign = generate_shop_sign(path, timestamp, access_token, shop_id)
+        
+        url = f"{HOST}{path}?partner_id={PARTNER_ID}&timestamp={timestamp}&access_token={access_token}&shop_id={shop_id}&sign={sign}"
+        debug_info["url"] = url
+        
+        # 請求 body
+        body = {
+            "item_id": item_id,
+            "price_list": [
+                {
+                    "original_price": price
+                }
+            ]
+        }
+        debug_info["request_body"] = body
+        
+        response = requests.post(url, json=body, timeout=30)
+        debug_info["status_code"] = response.status_code
+        
+        data = response.json()
+        debug_info["response"] = data
+        
+        if data.get("error") == "":
+            return {
+                "success": True,
+                "debug": debug_info
+            }
+        else:
+            return {
+                "success": False,
+                "error": data.get("message", data.get("error")),
+                "debug": debug_info
+            }
+    except Exception as e:
+        debug_info["exception"] = str(e)
+        return {
+            "success": False,
+            "error": str(e),
+            "debug": debug_info
+        }
+
+
+def search_item_by_name(access_token: str, shop_id: int, item_name: str, all_items: list = None):
+    """
+    用名稱搜尋蝦皮商品
+    如果提供 all_items，從中搜尋；否則從 API 取得
+    返回找到的 item_id 或 None
+    """
+    # 清理搜尋名稱（去掉前綴後比對）
+    search_name = item_name.replace("日本代購 日本直送 GOYOUTATI ", "").strip().lower()
+    
+    if all_items is None:
+        # 從 API 取得所有商品
+        all_items = []
+        offset = 0
+        while True:
+            result = get_item_list(access_token, shop_id, offset=offset, page_size=100)
+            if not result.get("success"):
+                break
+            items = result.get("items", [])
+            all_items.extend(items)
+            if not result.get("has_next"):
+                break
+            offset += 100
+    
+    # 搜尋匹配的商品
+    for item in all_items:
+        item_id = item.get("item_id")
+        # 需要再取得完整資訊才有名稱
+    
+    return None, all_items  # 暫時返回 None，需要用 get_item_base_info 取得名稱
