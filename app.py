@@ -385,12 +385,27 @@ def sync_page():
         
         <!-- Step 5: 執行同步 -->
         <div class="section">
-            <h3><span class="step-indicator">5</span>執行同步測試</h3>
+            <h3><span class="step-indicator">5</span>執行同步</h3>
             <div id="sync-summary" class="status-box status-warning" style="display:none;"></div>
-            <button class="btn btn-success" onclick="startSync()" id="sync-btn" style="font-size: 16px; padding: 15px 30px;">
-                🚀 開始同步測試
-            </button>
-            <p><small>💡 商品會以「未上架」狀態建立，需要手動上架</small></p>
+            
+            <div style="display: flex; gap: 15px; flex-wrap: wrap; align-items: center;">
+                <button class="btn" onclick="startSync(1)" id="test-btn" style="font-size: 14px; padding: 12px 20px; background: #6c757d;">
+                    🧪 測試同步 (每系列1個)
+                </button>
+                <button class="btn btn-success" onclick="startSync(250)" id="sync-btn" style="font-size: 16px; padding: 15px 30px;">
+                    🚀 全部上架
+                </button>
+                <div>
+                    <label>每系列上限：</label>
+                    <input type="number" id="sync-limit" value="250" min="1" max="250" style="width: 70px;">
+                </div>
+            </div>
+            
+            <p style="margin-top: 10px;">
+                <small>🧪 測試同步：每個系列只同步 1 個商品（用於測試）</small><br>
+                <small>🚀 全部上架：同步所有選中系列的全部商品（直接上架）</small>
+            </p>
+            
             <div id="sync-progress" style="display:none;">
                 <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width: 0%;"></div></div>
                 <div id="progress-text">準備中...</div>
@@ -711,9 +726,13 @@ def sync_page():
             }
             
             // ====== Step 5: 執行同步 ======
-            async function startSync() {
+            async function startSync(defaultLimit) {
                 const collections = getSelectedCollections();
                 const logistics = getSelectedLogistics();
+                
+                // 使用傳入的 limit 或從輸入框讀取
+                const limit = defaultLimit || parseInt(document.getElementById('sync-limit').value) || 250;
+                const isTestMode = (limit === 1);
                 
                 // 驗證
                 if (!selectedCategoryId) {
@@ -731,25 +750,37 @@ def sync_page():
                     return;
                 }
                 
+                // 全部上架前確認
+                if (!isTestMode) {
+                    const confirmMsg = '確定要同步 ' + collections.length + ' 個系列的所有商品？\\n\\n商品將直接上架到蝦皮商店！';
+                    if (!confirm(confirmMsg)) {
+                        return;
+                    }
+                }
+                
                 // 讀取價格設定
                 const exchangeRate = parseFloat(document.getElementById('exchange-rate').value) || 0.21;
                 const markupRate = parseFloat(document.getElementById('markup-rate').value) || 1.05;
                 
-                const btn = document.getElementById('sync-btn');
-                btn.disabled = true;
-                btn.textContent = '同步中...';
+                const testBtn = document.getElementById('test-btn');
+                const syncBtn = document.getElementById('sync-btn');
+                testBtn.disabled = true;
+                syncBtn.disabled = true;
+                syncBtn.textContent = '同步中...';
                 
                 document.getElementById('sync-progress').style.display = 'block';
                 
-                log('========== 開始同步測試 ==========', 'info');
+                const modeText = isTestMode ? '測試同步' : '全部上架';
+                log('========== 開始' + modeText + ' ==========', 'info');
+                log('模式: ' + modeText + ' (每系列上限: ' + limit + ')', 'dim');
                 log('分類 ID: ' + selectedCategoryId, 'dim');
                 log('物流渠道: ' + logistics.join(', '), 'dim');
                 log('匯率: ' + exchangeRate + ' | 加成: ' + markupRate + ' (價格乘數: ' + (exchangeRate * markupRate).toFixed(4) + ')', 'dim');
                 log('系列數量: ' + collections.length, 'dim');
                 log('', 'info');
                 
-                let successCount = 0;
-                let failCount = 0;
+                let totalSuccess = 0;
+                let totalFail = 0;
                 
                 for (let i = 0; i < collections.length; i++) {
                     const col = collections[i];
@@ -768,24 +799,37 @@ def sync_page():
                                 logistic_ids: logistics,
                                 exchange_rate: exchangeRate,
                                 markup_rate: markupRate,
-                                limit: 1
+                                limit: limit
                             })
                         });
                         
                         const data = await res.json();
                         debug(data);
                         
-                        if (data.success) {
-                            successCount++;
-                            log('  ✅ 同步成功！', 'success');
-                            if (data.results && data.results[0]) {
-                                const r = data.results[0];
-                                log('     商品: ' + r.title, 'dim');
-                                log('     蝦皮 Item ID: ' + r.shopee_item_id, 'dim');
+                        if (data.success && data.results) {
+                            const results = data.results;
+                            const successItems = results.filter(r => r.success);
+                            const failItems = results.filter(r => !r.success);
+                            
+                            totalSuccess += successItems.length;
+                            totalFail += failItems.length;
+                            
+                            if (successItems.length > 0) {
+                                log('  ✅ 成功同步 ' + successItems.length + ' 個商品', 'success');
+                                successItems.forEach(function(r) {
+                                    log('     • ' + r.title + ' (ID: ' + r.shopee_item_id + ')', 'dim');
+                                });
+                            }
+                            
+                            if (failItems.length > 0) {
+                                log('  ❌ 失敗 ' + failItems.length + ' 個商品', 'error');
+                                failItems.forEach(function(r) {
+                                    log('     • ' + r.title + ': ' + r.error, 'dim');
+                                });
                             }
                         } else {
-                            failCount++;
-                            log('  ❌ 同步失敗: ' + data.error, 'error');
+                            totalFail++;
+                            log('  ❌ 系列同步失敗: ' + (data.error || 'Unknown error'), 'error');
                             if (data.debug && data.debug.steps) {
                                 data.debug.steps.forEach(function(step) {
                                     log('     ' + step, 'dim');
@@ -794,7 +838,7 @@ def sync_page():
                         }
                         
                     } catch (e) {
-                        failCount++;
+                        totalFail++;
                         log('  ❌ 請求錯誤: ' + e.message, 'error');
                     }
                     
@@ -805,10 +849,11 @@ def sync_page():
                 }
                 
                 log('========== 同步完成 ==========', 'info');
-                log('成功: ' + successCount + ' / 失敗: ' + failCount, successCount > 0 ? 'success' : 'error');
+                log('總計成功: ' + totalSuccess + ' 個商品 / 失敗: ' + totalFail, totalSuccess > 0 ? 'success' : 'error');
                 
-                btn.disabled = false;
-                btn.textContent = '🚀 開始同步測試';
+                testBtn.disabled = false;
+                syncBtn.disabled = false;
+                syncBtn.textContent = '🚀 全部上架';
                 updateProgress(collections.length, collections.length, '完成！');
             }
         </script>
