@@ -353,7 +353,11 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
         ],
         "condition": "NEW",
         "item_status": "NORMAL",  # 直接上架
-        "days_to_ship": 5,  # 備貨時間 5 天
+        # 較長備貨設定（pre_order）
+        "pre_order": {
+            "is_pre_order": True,
+            "days_to_ship": 4  # 備貨時間 4 天
+        },
         # 品牌資訊（必填）
         "brand": {
             "brand_id": 0,  # 0 = 無品牌/自訂品牌
