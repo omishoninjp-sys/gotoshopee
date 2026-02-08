@@ -734,6 +734,9 @@ def sync_page():
                 const limit = defaultLimit || parseInt(document.getElementById('sync-limit').value) || 250;
                 const isTestMode = (limit === 1);
                 
+                // 每批處理的商品數量（避免超時）
+                const batchSize = 5;
+                
                 // 驗證
                 if (!selectedCategoryId) {
                     alert('請先選擇蝦皮分類！');
@@ -752,7 +755,7 @@ def sync_page():
                 
                 // 全部上架前確認
                 if (!isTestMode) {
-                    const confirmMsg = '確定要同步 ' + collections.length + ' 個系列的所有商品？\\n\\n商品將直接上架到蝦皮商店！';
+                    const confirmMsg = '確定要同步 ' + collections.length + ' 個系列的所有商品？\\n\\n商品將直接上架到蝦皮商店！\\n（每批處理 ' + batchSize + ' 個商品，避免超時）';
                     if (!confirm(confirmMsg)) {
                         return;
                     }
@@ -772,7 +775,7 @@ def sync_page():
                 
                 const modeText = isTestMode ? '測試同步' : '全部上架';
                 log('========== 開始' + modeText + ' ==========', 'info');
-                log('模式: ' + modeText + ' (每系列上限: ' + limit + ')', 'dim');
+                log('模式: ' + modeText + ' (每系列上限: ' + limit + ', 每批: ' + batchSize + ')', 'dim');
                 log('分類 ID: ' + selectedCategoryId, 'dim');
                 log('物流渠道: ' + logistics.join(', '), 'dim');
                 log('匯率: ' + exchangeRate + ' | 加成: ' + markupRate + ' (價格乘數: ' + (exchangeRate * markupRate).toFixed(4) + ')', 'dim');
@@ -788,63 +791,85 @@ def sync_page():
                     
                     log('[' + (i+1) + '/' + collections.length + '] 處理系列: ' + col.title, 'info');
                     
-                    try {
-                        const res = await fetch('/api/sync/collection', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                collection_id: col.id,
-                                collection_title: col.title,
-                                category_id: selectedCategoryId,
-                                logistic_ids: logistics,
-                                exchange_rate: exchangeRate,
-                                markup_rate: markupRate,
-                                limit: limit
-                            })
-                        });
+                    // 分批處理
+                    let offset = 0;
+                    let batchNum = 1;
+                    let hasMore = true;
+                    
+                    while (hasMore && offset < limit) {
+                        const currentBatchSize = Math.min(batchSize, limit - offset);
                         
-                        const data = await res.json();
-                        debug(data);
-                        
-                        if (data.success && data.results) {
-                            const results = data.results;
-                            const successItems = results.filter(r => r.success);
-                            const failItems = results.filter(r => !r.success);
-                            
-                            totalSuccess += successItems.length;
-                            totalFail += failItems.length;
-                            
-                            if (successItems.length > 0) {
-                                log('  ✅ 成功同步 ' + successItems.length + ' 個商品', 'success');
-                                successItems.forEach(function(r) {
-                                    log('     • ' + r.title + ' (ID: ' + r.shopee_item_id + ')', 'dim');
-                                });
-                            }
-                            
-                            if (failItems.length > 0) {
-                                log('  ❌ 失敗 ' + failItems.length + ' 個商品', 'error');
-                                failItems.forEach(function(r) {
-                                    log('     • ' + r.title + ': ' + r.error, 'dim');
-                                });
-                            }
-                        } else {
-                            totalFail++;
-                            log('  ❌ 系列同步失敗: ' + (data.error || 'Unknown error'), 'error');
-                            if (data.debug && data.debug.steps) {
-                                data.debug.steps.forEach(function(step) {
-                                    log('     ' + step, 'dim');
-                                });
-                            }
+                        if (!isTestMode) {
+                            log('    📦 第 ' + batchNum + ' 批 (offset: ' + offset + ', size: ' + currentBatchSize + ')', 'dim');
                         }
                         
-                    } catch (e) {
-                        totalFail++;
-                        log('  ❌ 請求錯誤: ' + e.message, 'error');
+                        try {
+                            const res = await fetch('/api/sync/collection', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    collection_id: col.id,
+                                    collection_title: col.title,
+                                    category_id: selectedCategoryId,
+                                    logistic_ids: logistics,
+                                    exchange_rate: exchangeRate,
+                                    markup_rate: markupRate,
+                                    limit: currentBatchSize,
+                                    offset: offset
+                                })
+                            });
+                            
+                            const data = await res.json();
+                            debug(data);
+                            
+                            if (data.success && data.results) {
+                                const results = data.results;
+                                const successItems = results.filter(r => r.success);
+                                const failItems = results.filter(r => !r.success);
+                                
+                                totalSuccess += successItems.length;
+                                totalFail += failItems.length;
+                                
+                                if (successItems.length > 0) {
+                                    log('    ✅ 成功 ' + successItems.length + ' 個', 'success');
+                                    successItems.forEach(function(r) {
+                                        log('       • ' + r.title + ' (ID: ' + r.shopee_item_id + ')', 'dim');
+                                    });
+                                }
+                                
+                                if (failItems.length > 0) {
+                                    log('    ❌ 失敗 ' + failItems.length + ' 個', 'error');
+                                    failItems.forEach(function(r) {
+                                        log('       • ' + r.title + ': ' + r.error, 'dim');
+                                    });
+                                }
+                                
+                                // 如果返回的商品數量少於請求的，表示沒有更多了
+                                if (results.length < currentBatchSize) {
+                                    hasMore = false;
+                                }
+                            } else {
+                                log('    ❌ 批次失敗: ' + (data.error || 'Unknown error'), 'error');
+                                hasMore = false;  // 出錯就停止這個系列
+                            }
+                            
+                        } catch (e) {
+                            log('    ❌ 請求錯誤: ' + e.message, 'error');
+                            hasMore = false;  // 出錯就停止這個系列
+                        }
+                        
+                        offset += currentBatchSize;
+                        batchNum++;
+                        
+                        // 批次間延遲
+                        if (hasMore) {
+                            await new Promise(function(r) { setTimeout(r, 500); });
+                        }
                     }
                     
                     log('', 'info');
                     
-                    // 稍微延遲避免 API 限制
+                    // 系列間延遲
                     await new Promise(function(r) { setTimeout(r, 1000); });
                 }
                 
@@ -958,6 +983,7 @@ def api_sync_collection():
     exchange_rate = data.get("exchange_rate", 0.21)  # 匯率
     markup_rate = data.get("markup_rate", 1.05)  # 加成比例
     limit = data.get("limit", 1)
+    offset = data.get("offset", 0)  # 分頁偏移量
     
     debug_info = {
         "collection_id": collection_id,
@@ -967,6 +993,7 @@ def api_sync_collection():
         "exchange_rate": exchange_rate,
         "markup_rate": markup_rate,
         "limit": limit,
+        "offset": offset,
         "steps": [],
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
     }
@@ -999,7 +1026,9 @@ def api_sync_collection():
         # 1. 獲取 Shopify 商品
         debug_info["steps"].append("Step 1: 獲取 Shopify 商品")
         shopify = ShopifyAPI()
-        products_result = shopify.get_products_in_collection(collection_id, limit=limit)
+        # 獲取足夠多的商品（offset + limit），然後切片
+        fetch_limit = offset + limit
+        products_result = shopify.get_products_in_collection(collection_id, limit=fetch_limit)
         
         debug_info["shopify_api_response"] = {
             "success": products_result.get("success"),
@@ -1016,13 +1045,19 @@ def api_sync_collection():
             })
         
         products = products_result.get("data", {}).get("products", [])
+        total_products = len(products)
+        debug_info["total_products_fetched"] = total_products
+        
+        # 應用 offset 切片
+        products = products[offset:offset + limit]
         debug_info["products_count"] = len(products)
-        debug_info["steps"].append(f"  ✅ 獲取到 {len(products)} 個商品")
+        debug_info["steps"].append(f"  ✅ 獲取到 {total_products} 個商品，處理 offset {offset} 起的 {len(products)} 個")
         
         if not products:
             return jsonify({
-                "success": False,
-                "error": "系列中沒有商品",
+                "success": True,
+                "results": [],
+                "message": "沒有更多商品",
                 "debug": debug_info
             })
         

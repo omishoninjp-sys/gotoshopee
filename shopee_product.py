@@ -303,24 +303,36 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
     # 庫存：統一設為 900
     stock = 900
     
+    # 標題前綴
+    title_prefix = "日本代購 日本直送 GOYOUTATI "
+    
     # 處理描述（移除 HTML 標籤的簡單方法）
     description = shopify_product.get("body_html", "")
     if description:
         import re
         description = re.sub(r'<[^>]+>', '', description)
-        description = description[:3000]  # 蝦皮描述上限
     
     if not description:
         description = shopify_product.get("title", "商品描述")
     
+    # 在描述前面加上前綴
+    description_prefix = "日本代購 日本直送 GOYOUTATI\n\n"
+    description = description_prefix + description
+    description = description[:3000]  # 蝦皮描述上限
+    
     # 從 Shopify vendor 取得品牌名稱，沒有的話用「無品牌」
     brand_name = shopify_product.get("vendor", "")
+    
+    # 處理標題（加上前綴，確保不超過 120 字）
+    original_title = shopify_product.get("title", "商品")
+    item_name = title_prefix + original_title
+    item_name = item_name[:120]  # 蝦皮標題上限 120 字
     
     # 建立蝦皮商品資料
     shopee_product = {
         "original_price": price if price >= 10 else 100,  # 最低價格 10 台幣，沒價格則設 100
         "description": description,
-        "item_name": shopify_product.get("title", "商品")[:120],  # 蝦皮標題上限 120 字
+        "item_name": item_name,
         "normal_stock": stock,
         "seller_stock": [{"stock": stock}],  # 賣家庫存（必填）
         "category_id": category_id,
