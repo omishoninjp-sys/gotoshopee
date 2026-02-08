@@ -834,7 +834,7 @@ def sync_page():
                             const data = await res.json();
                             debug(data);
                             
-                            if (data.success && data.results) {
+                            if (data.results && data.results.length > 0) {
                                 const results = data.results;
                                 const successItems = results.filter(r => r.success && !r.skipped && !r.price_updated);
                                 const priceUpdatedItems = results.filter(r => r.success && r.price_updated);
