@@ -367,10 +367,17 @@ def sync_page():
                     <input type="number" id="markup-rate" value="1.05" step="0.01" min="1" style="width: 100px;">
                 </div>
                 <div>
+                    <label><strong>最低價格 (NT$)：</strong></label><br>
+                    <input type="number" id="min-price" value="1000" step="100" min="0" style="width: 100px;">
+                </div>
+                <div>
                     <label><strong>範例計算：</strong></label><br>
                     <span id="price-example">¥1,000 → NT$221</span>
                 </div>
             </div>
+            <p style="margin-top: 10px; color: #666;">
+                <small>⚠️ 低於最低價格的商品將自動跳過不上架</small>
+            </p>
             <script>
                 function updatePriceExample() {
                     const rate = parseFloat(document.getElementById('exchange-rate').value) || 0.21;
@@ -768,6 +775,7 @@ def sync_page():
                 // 讀取價格設定
                 const exchangeRate = parseFloat(document.getElementById('exchange-rate').value) || 0.21;
                 const markupRate = parseFloat(document.getElementById('markup-rate').value) || 1.05;
+                const minPrice = parseInt(document.getElementById('min-price').value) || 1000;
                 
                 const testBtn = document.getElementById('test-btn');
                 const syncBtn = document.getElementById('sync-btn');
@@ -782,7 +790,7 @@ def sync_page():
                 log('模式: ' + modeText + ' (每系列上限: ' + limit + ', 每批: ' + batchSize + ')', 'dim');
                 log('分類 ID: ' + selectedCategoryId, 'dim');
                 log('物流渠道: ' + logistics.join(', '), 'dim');
-                log('匯率: ' + exchangeRate + ' | 加成: ' + markupRate + ' (價格乘數: ' + (exchangeRate * markupRate).toFixed(4) + ')', 'dim');
+                log('匯率: ' + exchangeRate + ' | 加成: ' + markupRate + ' | 最低價格: NT$' + minPrice, 'dim');
                 log('系列數量: ' + collections.length, 'dim');
                 log('', 'info');
                 
@@ -817,6 +825,7 @@ def sync_page():
                                     logistic_ids: logistics,
                                     exchange_rate: exchangeRate,
                                     markup_rate: markupRate,
+                                    min_price: minPrice,
                                     limit: currentBatchSize,
                                     offset: offset
                                 })
@@ -829,8 +838,9 @@ def sync_page():
                                 const results = data.results;
                                 const successItems = results.filter(r => r.success && !r.skipped && !r.price_updated);
                                 const priceUpdatedItems = results.filter(r => r.success && r.price_updated);
-                                const skippedItems = results.filter(r => r.success && r.skipped);
-                                const failItems = results.filter(r => !r.success);
+                                const skippedItems = results.filter(r => r.success && r.skipped && !r.low_price);
+                                const lowPriceItems = results.filter(r => r.low_price);
+                                const failItems = results.filter(r => !r.success && !r.low_price);
                                 
                                 totalSuccess += successItems.length + priceUpdatedItems.length;
                                 totalFail += failItems.length;
@@ -838,7 +848,7 @@ def sync_page():
                                 seriesFail += failItems.length;
                                 
                                 successItems.forEach(function(r) {
-                                    log('  ✅ ' + r.title + ' (ID: ' + r.shopee_item_id + ')', 'success');
+                                    log('  ✅ ' + r.title + ' NT$' + r.price + ' (ID: ' + r.shopee_item_id + ')', 'success');
                                 });
                                 
                                 priceUpdatedItems.forEach(function(r) {
@@ -847,6 +857,10 @@ def sync_page():
                                 
                                 skippedItems.forEach(function(r) {
                                     log('  ⏭️ ' + r.title + ' (已存在，跳過)', 'warning');
+                                });
+                                
+                                lowPriceItems.forEach(function(r) {
+                                    log('  💸 ' + r.title + ' NT$' + r.price + ' (低於最低價格，跳過)', 'dim');
                                 });
                                 
                                 failItems.forEach(function(r) {
@@ -1105,6 +1119,7 @@ def api_sync_collection():
     logistic_ids = data.get("logistic_ids", [])
     exchange_rate = data.get("exchange_rate", 0.21)  # 匯率
     markup_rate = data.get("markup_rate", 1.05)  # 加成比例
+    min_price = data.get("min_price", 0)  # 最低價格限制
     limit = data.get("limit", 1)
     offset = data.get("offset", 0)  # 分頁偏移量
     
@@ -1115,6 +1130,7 @@ def api_sync_collection():
         "logistic_ids": logistic_ids,
         "exchange_rate": exchange_rate,
         "markup_rate": markup_rate,
+        "min_price": min_price,
         "limit": limit,
         "offset": offset,
         "steps": [],
@@ -1205,7 +1221,23 @@ def api_sync_collection():
             try:
                 debug_info["steps"].append(f"Step 2.{idx+1}: 處理商品 - {product.get('title')}")
                 
-                # 2a. 檢查圖片
+                # 2a. 先計算價格，檢查是否低於最低價格
+                variants = product.get("variants", [])
+                calculated_price = 100
+                if variants:
+                    shopify_price = float(variants[0].get("price", 0))
+                    calculated_price = round(shopify_price * exchange_rate * markup_rate)
+                
+                product_result["price"] = calculated_price
+                
+                if min_price > 0 and calculated_price < min_price:
+                    product_result["low_price"] = True
+                    product_result["success"] = False
+                    debug_info["steps"].append(f"  💸 價格 NT${calculated_price} 低於最低價格 NT${min_price}，跳過")
+                    results.append(product_result)
+                    continue
+                
+                # 2b. 檢查圖片
                 images = product.get("images", [])
                 image_urls = [img.get("src") for img in images if img.get("src")]
                 product_debug["image_urls"] = image_urls[:3]  # 只記錄前3個
@@ -1218,7 +1250,7 @@ def api_sync_collection():
                 
                 debug_info["steps"].append(f"  找到 {len(image_urls)} 張圖片")
                 
-                # 2b. 上傳圖片到蝦皮
+                # 2c. 上傳圖片到蝦皮
                 image_ids = []
                 image_upload_results = []
                 
