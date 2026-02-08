@@ -823,16 +823,21 @@ def sync_page():
                             
                             if (data.success && data.results) {
                                 const results = data.results;
-                                const successItems = results.filter(r => r.success);
+                                const successItems = results.filter(r => r.success && !r.skipped);
+                                const skippedItems = results.filter(r => r.success && r.skipped);
                                 const failItems = results.filter(r => !r.success);
                                 
                                 totalSuccess += successItems.length;
                                 totalFail += failItems.length;
-                                seriesSuccess += successItems.length;
+                                seriesSuccess += successItems.length + skippedItems.length;
                                 seriesFail += failItems.length;
                                 
                                 successItems.forEach(function(r) {
                                     log('  ✅ ' + r.title + ' (ID: ' + r.shopee_item_id + ')', 'success');
+                                });
+                                
+                                skippedItems.forEach(function(r) {
+                                    log('  ⏭️ ' + r.title + ' (已存在，跳過)', 'warning');
                                 });
                                 
                                 failItems.forEach(function(r) {
@@ -1183,8 +1188,17 @@ def api_sync_collection():
                     product_result["shopee_item_id"] = create_result.get("item_id")
                     debug_info["steps"].append(f"  ✅ 創建成功！Item ID: {create_result.get('item_id')}")
                 else:
-                    product_result["error"] = create_result.get("error")
-                    debug_info["steps"].append(f"  ❌ 創建失敗: {create_result.get('error')}")
+                    error_msg = create_result.get("error", "")
+                    
+                    # 檢查是否為重複商品
+                    if "duplicate" in error_msg.lower() or "duplicated" in error_msg.lower():
+                        product_result["success"] = True  # 視為成功（已存在）
+                        product_result["shopee_item_id"] = "已存在"
+                        product_result["skipped"] = True
+                        debug_info["steps"].append(f"  ⏭️ 商品已存在，跳過")
+                    else:
+                        product_result["error"] = error_msg
+                        debug_info["steps"].append(f"  ❌ 創建失敗: {error_msg}")
                     
                     # 記錄完整的 API 回應以便 debug
                     if create_result.get("debug", {}).get("response"):
