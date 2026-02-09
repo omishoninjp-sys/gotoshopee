@@ -1210,6 +1210,7 @@ def api_sync_collection():
             product_debug = {
                 "shopify_id": product.get("id"),
                 "title": product.get("title"),
+                "handle": product.get("handle"),  # 加入 handle 以便 debug
                 "variants_count": len(product.get("variants", [])),
                 "images_count": len(product.get("images", []))
             }
@@ -1217,6 +1218,7 @@ def api_sync_collection():
             product_result = {
                 "shopify_id": product.get("id"),
                 "title": product.get("title"),
+                "handle": product.get("handle"),  # 加入 handle
                 "success": False,
                 "shopee_item_id": None,
                 "error": None,
@@ -1224,7 +1226,7 @@ def api_sync_collection():
             }
             
             try:
-                debug_info["steps"].append(f"Step 2.{idx+1}: 處理商品 - {product.get('title')}")
+                debug_info["steps"].append(f"Step 2.{idx+1}: 處理商品 - {product.get('title')} (handle: {product.get('handle')})")
                 
                 # 2a. 檢查商品名稱是否包含日文（平假名或片假名）
                 import re
