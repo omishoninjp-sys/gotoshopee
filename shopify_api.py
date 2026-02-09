@@ -12,14 +12,15 @@ class ShopifyAPI:
         self.access_token = SHOPIFY_ACCESS_TOKEN
         self.api_version = "2024-01"
         self.base_url = f"https://{self.store}/admin/api/{self.api_version}"
+        self.graphql_url = f"https://{self.store}/admin/api/{self.api_version}/graphql.json"
         
     def _request(self, method, endpoint, params=None, json_data=None):
-        """發送 API 請求"""
+        """發送 REST API 請求"""
         url = f"{self.base_url}{endpoint}"
         headers = {
             "X-Shopify-Access-Token": self.access_token,
             "Content-Type": "application/json",
-            "Accept-Language": "zh-TW"  # 請求繁體中文翻譯
+            "Accept-Language": "zh-TW"
         }
         
         try:
@@ -38,6 +39,32 @@ class ShopifyAPI:
                 "success": False, 
                 "error": str(e),
                 "status_code": getattr(e.response, 'status_code', None) if hasattr(e, 'response') else None
+            }
+    
+    def _graphql_request(self, query, variables=None):
+        """發送 GraphQL API 請求"""
+        headers = {
+            "X-Shopify-Access-Token": self.access_token,
+            "Content-Type": "application/json"
+        }
+        
+        payload = {"query": query}
+        if variables:
+            payload["variables"] = variables
+        
+        try:
+            response = requests.post(
+                self.graphql_url,
+                headers=headers,
+                json=payload,
+                timeout=60
+            )
+            response.raise_for_status()
+            return {"success": True, "data": response.json()}
+        except requests.exceptions.RequestException as e:
+            return {
+                "success": False,
+                "error": str(e)
             }
     
     def get_products(self, limit=50, collection_id=None, product_type=None):
@@ -100,15 +127,102 @@ class ShopifyAPI:
         return collections
     
     def get_products_in_collection(self, collection_id, limit=1):
-        """獲取某個系列中的商品（包含完整 variants 資料）"""
-        # 使用 /products.json?collection_id= 來獲取完整商品資料（包含 variants）
-        # 加入 locale=zh-TW 獲取繁體中文翻譯
-        result = self._request(
-            "GET", 
-            f"/products.json",
-            params={"collection_id": collection_id, "limit": limit, "locale": "zh-TW"}
-        )
-        return result
+        """獲取某個系列中的商品（使用 GraphQL 獲取繁體中文翻譯）"""
+        
+        # 使用 GraphQL API 配合 @inContext 獲取繁體中文翻譯
+        query = """
+        query getProducts($first: Int!) @inContext(language: ZH_TW) {
+            products(first: $first, query: "collection_id:%s") {
+                nodes {
+                    id
+                    title
+                    handle
+                    descriptionHtml
+                    vendor
+                    productType
+                    variants(first: 10) {
+                        nodes {
+                            id
+                            title
+                            price
+                            sku
+                            weight
+                            weightUnit
+                        }
+                    }
+                    images(first: 10) {
+                        nodes {
+                            url
+                            altText
+                        }
+                    }
+                }
+            }
+        }
+        """ % collection_id
+        
+        result = self._graphql_request(query, {"first": limit})
+        
+        if not result.get("success"):
+            return result
+        
+        data = result.get("data", {})
+        
+        # 檢查 GraphQL 錯誤
+        if "errors" in data:
+            return {
+                "success": False,
+                "error": str(data["errors"])
+            }
+        
+        # 轉換 GraphQL 格式為 REST API 格式（保持相容性）
+        products_data = data.get("data", {}).get("products", {}).get("nodes", [])
+        
+        products = []
+        for p in products_data:
+            # 將 GraphQL ID 轉換為數字 ID
+            gid = p.get("id", "")
+            numeric_id = gid.split("/")[-1] if "/" in gid else gid
+            
+            # 轉換 variants
+            variants = []
+            for v in p.get("variants", {}).get("nodes", []):
+                v_gid = v.get("id", "")
+                v_numeric_id = v_gid.split("/")[-1] if "/" in v_gid else v_gid
+                variants.append({
+                    "id": v_numeric_id,
+                    "title": v.get("title"),
+                    "price": v.get("price"),
+                    "sku": v.get("sku"),
+                    "weight": v.get("weight"),
+                    "weight_unit": v.get("weightUnit", "").lower()
+                })
+            
+            # 轉換 images
+            images = []
+            for img in p.get("images", {}).get("nodes", []):
+                images.append({
+                    "src": img.get("url"),
+                    "alt": img.get("altText")
+                })
+            
+            products.append({
+                "id": numeric_id,
+                "title": p.get("title"),
+                "handle": p.get("handle"),
+                "body_html": p.get("descriptionHtml"),
+                "vendor": p.get("vendor"),
+                "product_type": p.get("productType"),
+                "variants": variants,
+                "images": images
+            })
+        
+        return {
+            "success": True,
+            "data": {
+                "products": products
+            }
+        }
     
     def test_connection(self):
         """測試 API 連線"""
