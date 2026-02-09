@@ -840,7 +840,8 @@ def sync_page():
                                 const priceUpdatedItems = results.filter(r => r.success && r.price_updated);
                                 const skippedItems = results.filter(r => r.success && r.skipped && !r.low_price);
                                 const lowPriceItems = results.filter(r => r.low_price);
-                                const failItems = results.filter(r => !r.success && !r.low_price);
+                                const japaneseItems = results.filter(r => r.has_japanese);
+                                const failItems = results.filter(r => !r.success && !r.low_price && !r.has_japanese);
                                 
                                 totalSuccess += successItems.length + priceUpdatedItems.length;
                                 totalFail += failItems.length;
@@ -861,6 +862,10 @@ def sync_page():
                                 
                                 lowPriceItems.forEach(function(r) {
                                     log('  💸 ' + r.title + ' NT$' + r.price + ' (低於最低價格，跳過)', 'dim');
+                                });
+                                
+                                japaneseItems.forEach(function(r) {
+                                    log('  🈂️ ' + r.title + ' (商品名為日文，請重新同步商品或翻譯)', 'warning');
                                 });
                                 
                                 failItems.forEach(function(r) {
@@ -1221,7 +1226,18 @@ def api_sync_collection():
             try:
                 debug_info["steps"].append(f"Step 2.{idx+1}: 處理商品 - {product.get('title')}")
                 
-                # 2a. 先計算價格，檢查是否低於最低價格
+                # 2a. 檢查商品名稱是否包含日文（平假名或片假名）
+                import re
+                title = product.get("title", "")
+                # 平假名: \u3040-\u309F, 片假名: \u30A0-\u30FF
+                if re.search(r'[\u3040-\u309F\u30A0-\u30FF]', title):
+                    product_result["has_japanese"] = True
+                    product_result["success"] = False
+                    debug_info["steps"].append(f"  🈂️ 商品名稱含有日文，請重新同步商品或翻譯")
+                    results.append(product_result)
+                    continue
+                
+                # 2b. 計算價格，檢查是否低於最低價格
                 variants = product.get("variants", [])
                 calculated_price = 100
                 if variants:
@@ -1237,7 +1253,7 @@ def api_sync_collection():
                     results.append(product_result)
                     continue
                 
-                # 2b. 檢查圖片
+                # 2c. 檢查圖片
                 images = product.get("images", [])
                 image_urls = [img.get("src") for img in images if img.get("src")]
                 product_debug["image_urls"] = image_urls[:3]  # 只記錄前3個
@@ -1250,7 +1266,7 @@ def api_sync_collection():
                 
                 debug_info["steps"].append(f"  找到 {len(image_urls)} 張圖片")
                 
-                # 2c. 上傳圖片到蝦皮
+                # 2d. 上傳圖片到蝦皮
                 image_ids = []
                 image_upload_results = []
                 
