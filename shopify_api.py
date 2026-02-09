@@ -18,7 +18,8 @@ class ShopifyAPI:
         url = f"{self.base_url}{endpoint}"
         headers = {
             "X-Shopify-Access-Token": self.access_token,
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "Accept-Language": "zh-TW"  # 請求繁體中文翻譯
         }
         
         try:
@@ -101,10 +102,11 @@ class ShopifyAPI:
     def get_products_in_collection(self, collection_id, limit=1):
         """獲取某個系列中的商品（包含完整 variants 資料）"""
         # 使用 /products.json?collection_id= 來獲取完整商品資料（包含 variants）
+        # 加入 locale=zh-TW 獲取繁體中文翻譯
         result = self._request(
             "GET", 
             f"/products.json",
-            params={"collection_id": collection_id, "limit": limit}
+            params={"collection_id": collection_id, "limit": limit, "locale": "zh-TW"}
         )
         return result
     
