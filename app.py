@@ -364,15 +364,15 @@ def sync_page():
                 </div>
                 <div>
                     <label><strong>加成比例：</strong></label><br>
-                    <input type="number" id="markup-rate" value="1.05" step="0.01" min="1" style="width: 100px;">
+                    <input type="number" id="markup-rate" value="1.3" step="0.01" min="1" style="width: 100px;">
                 </div>
                 <div>
                     <label><strong>最低價格 (NT$)：</strong></label><br>
-                    <input type="number" id="min-price" value="1000" step="100" min="0" style="width: 100px;">
+                    <input type="number" id="min-price" value="1500" step="100" min="0" style="width: 100px;">
                 </div>
                 <div>
                     <label><strong>範例計算：</strong></label><br>
-                    <span id="price-example">¥1,000 → NT$221</span>
+                    <span id="price-example">¥1,000 → NT$273</span>
                 </div>
             </div>
             <p style="margin-top: 10px; color: #666;">
@@ -381,7 +381,7 @@ def sync_page():
             <script>
                 function updatePriceExample() {
                     const rate = parseFloat(document.getElementById('exchange-rate').value) || 0.21;
-                    const markup = parseFloat(document.getElementById('markup-rate').value) || 1.05;
+                    const markup = parseFloat(document.getElementById('markup-rate').value) || 1.3;
                     const example = Math.round(1000 * rate * markup);
                     document.getElementById('price-example').textContent = '¥1,000 → NT$' + example;
                 }

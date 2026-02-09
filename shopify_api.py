@@ -129,9 +129,9 @@ class ShopifyAPI:
     def get_products_in_collection(self, collection_id, limit=1):
         """獲取某個系列中的商品（使用 GraphQL 獲取繁體中文翻譯）"""
         
-        # 使用 GraphQL API 配合 @inContext 獲取繁體中文翻譯
+        # 使用 GraphQL API 獲取商品及翻譯
         query = """
-        query getProducts($first: Int!) @inContext(language: ZH_TW) {
+        query getProducts($first: Int!) {
             products(first: $first, query: "collection_id:%s") {
                 nodes {
                     id
@@ -140,14 +140,24 @@ class ShopifyAPI:
                     descriptionHtml
                     vendor
                     productType
+                    translations(locale: "zh-TW") {
+                        key
+                        value
+                    }
                     variants(first: 10) {
                         nodes {
                             id
                             title
                             price
                             sku
-                            weight
-                            weightUnit
+                            inventoryItem {
+                                measurement {
+                                    weight {
+                                        value
+                                        unit
+                                    }
+                                }
+                            }
                         }
                     }
                     images(first: 10) {
@@ -184,18 +194,42 @@ class ShopifyAPI:
             gid = p.get("id", "")
             numeric_id = gid.split("/")[-1] if "/" in gid else gid
             
+            # 從 translations 中獲取翻譯後的標題
+            title = p.get("title", "")
+            body_html = p.get("descriptionHtml", "")
+            
+            translations = p.get("translations", [])
+            for t in translations:
+                if t.get("key") == "title" and t.get("value"):
+                    title = t.get("value")
+                elif t.get("key") == "body_html" and t.get("value"):
+                    body_html = t.get("value")
+            
             # 轉換 variants
             variants = []
             for v in p.get("variants", {}).get("nodes", []):
                 v_gid = v.get("id", "")
                 v_numeric_id = v_gid.split("/")[-1] if "/" in v_gid else v_gid
+                
+                # 獲取重量
+                weight = 0
+                weight_unit = "g"
+                inv_item = v.get("inventoryItem", {})
+                if inv_item:
+                    measurement = inv_item.get("measurement", {})
+                    if measurement:
+                        weight_info = measurement.get("weight", {})
+                        if weight_info:
+                            weight = weight_info.get("value", 0)
+                            weight_unit = weight_info.get("unit", "GRAMS").lower()
+                
                 variants.append({
                     "id": v_numeric_id,
                     "title": v.get("title"),
                     "price": v.get("price"),
                     "sku": v.get("sku"),
-                    "weight": v.get("weight"),
-                    "weight_unit": v.get("weightUnit", "").lower()
+                    "weight": weight,
+                    "weight_unit": weight_unit
                 })
             
             # 轉換 images
@@ -208,9 +242,9 @@ class ShopifyAPI:
             
             products.append({
                 "id": numeric_id,
-                "title": p.get("title"),
+                "title": title,
                 "handle": p.get("handle"),
-                "body_html": p.get("descriptionHtml"),
+                "body_html": body_html,
                 "vendor": p.get("vendor"),
                 "product_type": p.get("productType"),
                 "variants": variants,
