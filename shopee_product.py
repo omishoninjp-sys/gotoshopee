@@ -446,16 +446,17 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
                 model_list.append({
                     "tier_index": tier_index,
                     "original_price": variant_price,
-                    "stock": variant_stock  # 在 model 裡直接設定庫存
+                    "stock": variant_stock
                 })
         
         # 加入規格設定到商品資料
         if tier_variation and model_list:
             shopee_product["tier_variation"] = tier_variation
             shopee_product["model"] = model_list
-            # 移除單規格的庫存設定（多規格用 model 裡的 stock）
-            del shopee_product["normal_stock"]
-            del shopee_product["seller_stock"]
+            # 多規格商品：normal_stock 設為 0，seller_stock 保留但設為總庫存
+            total_stock = sum(m.get("stock", 0) for m in model_list)
+            shopee_product["normal_stock"] = 0
+            shopee_product["seller_stock"] = [{"stock": total_stock}]
     
     # 備貨設定：根據參數決定是否較長備貨
     if pre_order:
