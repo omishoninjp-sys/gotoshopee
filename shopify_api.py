@@ -156,6 +156,7 @@ class ShopifyAPI:
                             title
                             price
                             sku
+                            inventoryQuantity
                             selectedOptions {
                                 name
                                 value
@@ -238,6 +239,14 @@ class ShopifyAPI:
                 option1 = selected_options[0].get("value") if len(selected_options) > 0 else None
                 option2 = selected_options[1].get("value") if len(selected_options) > 1 else None
                 
+                # 獲取庫存數量
+                # 如果 inventoryQuantity 是 null，表示沒有追蹤庫存，設為 900
+                inventory_quantity = v.get("inventoryQuantity")
+                if inventory_quantity is None:
+                    inventory_quantity = 900  # 沒追蹤庫存，設為預設值
+                elif inventory_quantity < 0:
+                    inventory_quantity = 0
+                
                 variants.append({
                     "id": v_numeric_id,
                     "title": v.get("title"),
@@ -246,7 +255,8 @@ class ShopifyAPI:
                     "weight": weight,
                     "weight_unit": weight_unit,
                     "option1": option1,
-                    "option2": option2
+                    "option2": option2,
+                    "inventory_quantity": inventory_quantity
                 })
             
             # 轉換 options（選項名稱和值）
