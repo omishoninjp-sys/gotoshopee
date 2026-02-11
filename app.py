@@ -390,6 +390,36 @@ def sync_page():
             </script>
         </div>
         
+        <!-- Step 4.6: 備貨設定 -->
+        <div class="section">
+            <h3><span class="step-indicator">📦</span>備貨設定</h3>
+            <div style="display: flex; gap: 20px; align-items: center; flex-wrap: wrap;">
+                <div>
+                    <label style="cursor: pointer;">
+                        <input type="checkbox" id="pre-order" checked onchange="toggleDaysToShip()">
+                        <strong>較長備貨</strong>
+                    </label>
+                </div>
+                <div id="days-to-ship-container">
+                    <label><strong>備貨天數：</strong></label>
+                    <input type="number" id="days-to-ship" value="4" min="1" max="15" style="width: 60px;">
+                    <span>天</span>
+                </div>
+            </div>
+            <p style="margin-top: 10px; color: #666;">
+                <small>✅ 較長備貨：代購商品建議開啟，備貨時間可設 1-15 天</small><br>
+                <small>❌ 不勾選：一般商品，需在 1-3 個工作日內出貨</small>
+            </p>
+            <script>
+                function toggleDaysToShip() {
+                    const preOrder = document.getElementById('pre-order').checked;
+                    const container = document.getElementById('days-to-ship-container');
+                    container.style.opacity = preOrder ? '1' : '0.5';
+                    document.getElementById('days-to-ship').disabled = !preOrder;
+                }
+            </script>
+        </div>
+        
         <!-- Step 5: 執行同步 -->
         <div class="section">
             <h3><span class="step-indicator">5</span>執行同步</h3>
@@ -777,6 +807,10 @@ def sync_page():
                 const markupRate = parseFloat(document.getElementById('markup-rate').value) || 1.05;
                 const minPrice = parseInt(document.getElementById('min-price').value) || 1000;
                 
+                // 讀取備貨設定
+                const preOrder = document.getElementById('pre-order').checked;
+                const daysToShip = parseInt(document.getElementById('days-to-ship').value) || 4;
+                
                 const testBtn = document.getElementById('test-btn');
                 const syncBtn = document.getElementById('sync-btn');
                 testBtn.disabled = true;
@@ -791,6 +825,7 @@ def sync_page():
                 log('分類 ID: ' + selectedCategoryId, 'dim');
                 log('物流渠道: ' + logistics.join(', '), 'dim');
                 log('匯率: ' + exchangeRate + ' | 加成: ' + markupRate + ' | 最低價格: NT$' + minPrice, 'dim');
+                log('較長備貨: ' + (preOrder ? '是 (' + daysToShip + '天)' : '否'), 'dim');
                 log('系列數量: ' + collections.length, 'dim');
                 log('', 'info');
                 
@@ -826,6 +861,8 @@ def sync_page():
                                     exchange_rate: exchangeRate,
                                     markup_rate: markupRate,
                                     min_price: minPrice,
+                                    pre_order: preOrder,
+                                    days_to_ship: daysToShip,
                                     limit: currentBatchSize,
                                     offset: offset
                                 })
@@ -1125,6 +1162,8 @@ def api_sync_collection():
     exchange_rate = data.get("exchange_rate", 0.21)  # 匯率
     markup_rate = data.get("markup_rate", 1.05)  # 加成比例
     min_price = data.get("min_price", 0)  # 最低價格限制
+    pre_order = data.get("pre_order", True)  # 是否較長備貨
+    days_to_ship = data.get("days_to_ship", 4)  # 備貨天數
     limit = data.get("limit", 1)
     offset = data.get("offset", 0)  # 分頁偏移量
     
@@ -1136,6 +1175,8 @@ def api_sync_collection():
         "exchange_rate": exchange_rate,
         "markup_rate": markup_rate,
         "min_price": min_price,
+        "pre_order": pre_order,
+        "days_to_ship": days_to_ship,
         "limit": limit,
         "offset": offset,
         "steps": [],
@@ -1315,7 +1356,9 @@ def api_sync_collection():
                     collection_title,  # 傳遞系列名稱
                     country_origin_attr,  # 傳遞產地屬性
                     exchange_rate,  # 匯率
-                    markup_rate  # 加成比例
+                    markup_rate,  # 加成比例
+                    pre_order,  # 是否較長備貨
+                    days_to_ship  # 備貨天數
                 )
                 
                 # 更新物流設定

@@ -142,16 +142,24 @@ class ShopifyAPI:
                     descriptionHtml
                     vendor
                     productType
+                    options {
+                        name
+                        values
+                    }
                     translations(locale: "zh-TW") {
                         key
                         value
                     }
-                    variants(first: 10) {
+                    variants(first: 100) {
                         nodes {
                             id
                             title
                             price
                             sku
+                            selectedOptions {
+                                name
+                                value
+                            }
                             inventoryItem {
                                 measurement {
                                     weight {
@@ -225,14 +233,24 @@ class ShopifyAPI:
                             weight = weight_info.get("value", 0)
                             weight_unit = weight_info.get("unit", "GRAMS").lower()
                 
+                # 獲取選項值
+                selected_options = v.get("selectedOptions", [])
+                option1 = selected_options[0].get("value") if len(selected_options) > 0 else None
+                option2 = selected_options[1].get("value") if len(selected_options) > 1 else None
+                
                 variants.append({
                     "id": v_numeric_id,
                     "title": v.get("title"),
                     "price": v.get("price"),
                     "sku": v.get("sku"),
                     "weight": weight,
-                    "weight_unit": weight_unit
+                    "weight_unit": weight_unit,
+                    "option1": option1,
+                    "option2": option2
                 })
+            
+            # 轉換 options（選項名稱和值）
+            options = p.get("options", [])
             
             # 轉換 images
             images = []
@@ -249,6 +267,7 @@ class ShopifyAPI:
                 "body_html": body_html,
                 "vendor": p.get("vendor"),
                 "product_type": p.get("productType"),
+                "options": options,
                 "variants": variants,
                 "images": images
             })

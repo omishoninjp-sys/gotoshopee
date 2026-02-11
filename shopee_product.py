@@ -258,7 +258,7 @@ def create_product(access_token: str, shop_id: int, product_data: dict):
             "debug": debug_info
         }
 
-def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids: list, collection_title: str = "", country_origin_attr: dict = None, exchange_rate: float = 0.21, markup_rate: float = 1.05):
+def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids: list, collection_title: str = "", country_origin_attr: dict = None, exchange_rate: float = 0.21, markup_rate: float = 1.05, pre_order: bool = True, days_to_ship: int = 4):
     """
     將 Shopify 商品轉換為蝦皮商品格式
     
@@ -270,11 +270,18 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
         country_origin_attr: 產地屬性資訊 {"attribute_id": xxx, "value_id": xxx, "original_value_name": "日本"}
         exchange_rate: 匯率 (JPY → TWD)，預設 0.21
         markup_rate: 加成比例，預設 1.05
+        pre_order: 是否較長備貨，預設 True
+        days_to_ship: 備貨天數，預設 4 天
     """
-    # 取得價格（從第一個 variant）
+    # 取得價格和選項資訊
     variants = shopify_product.get("variants", [])
+    options = shopify_product.get("options", [])
     price = 0
     weight = 0.5  # 預設重量 0.5kg
+    
+    # 判斷是否為多規格商品
+    # 如果只有一個 variant 且選項是 "Default Title"，則為單規格
+    has_variants = len(variants) > 1 or (len(variants) == 1 and variants[0].get("option1") not in [None, "Default Title", "預設標題"])
     
     if variants:
         first_variant = variants[0]
@@ -287,7 +294,7 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
         weight_unit = first_variant.get("weight_unit", "kg")
         
         # 轉換重量單位到 kg
-        if weight_unit == "g":
+        if weight_unit == "g" or weight_unit == "grams":
             weight = shopify_weight / 1000
         elif weight_unit == "lb":
             weight = shopify_weight * 0.453592
@@ -353,17 +360,96 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
         ],
         "condition": "NEW",
         "item_status": "NORMAL",  # 直接上架
-        # 較長備貨設定（pre_order）
-        "pre_order": {
-            "is_pre_order": True,
-            "days_to_ship": 4  # 備貨時間 4 天
-        },
         # 品牌資訊（必填）
         "brand": {
             "brand_id": 0,  # 0 = 無品牌/自訂品牌
             "original_brand_name": brand_name if brand_name else "No Brand"
         }
     }
+    
+    # 處理多規格商品
+    if has_variants and options:
+        # 蝦皮最多支援 2 層規格
+        tier_variation = []
+        
+        # 處理第一層規格
+        if len(options) >= 1:
+            opt1 = options[0]
+            opt1_name = opt1.get("name", "規格")
+            opt1_values = opt1.get("values", [])
+            if opt1_values:
+                tier_variation.append({
+                    "name": opt1_name[:20],  # 規格名稱最多 20 字
+                    "option_list": [{"option": str(v)[:20]} for v in opt1_values]  # 選項最多 20 字
+                })
+        
+        # 處理第二層規格（如果有）
+        if len(options) >= 2:
+            opt2 = options[1]
+            opt2_name = opt2.get("name", "規格2")
+            opt2_values = opt2.get("values", [])
+            if opt2_values:
+                tier_variation.append({
+                    "name": opt2_name[:20],
+                    "option_list": [{"option": str(v)[:20]} for v in opt2_values]
+                })
+        
+        # 建立選項值到索引的對照表
+        opt1_index_map = {}
+        opt2_index_map = {}
+        
+        if len(tier_variation) >= 1:
+            for idx, opt in enumerate(tier_variation[0].get("option_list", [])):
+                opt1_index_map[opt.get("option")] = idx
+        
+        if len(tier_variation) >= 2:
+            for idx, opt in enumerate(tier_variation[1].get("option_list", [])):
+                opt2_index_map[opt.get("option")] = idx
+        
+        # 建立 model（每個變體的價格和庫存）
+        model_list = []
+        for v in variants:
+            variant_price = round(float(v.get("price", 0)) * exchange_rate * markup_rate)
+            if variant_price < 10:
+                variant_price = price if price >= 10 else 100
+            
+            # 取得選項值並找到對應索引
+            opt1_val = str(v.get("option1", ""))[:20] if v.get("option1") else None
+            opt2_val = str(v.get("option2", ""))[:20] if v.get("option2") else None
+            
+            tier_index = []
+            if opt1_val and opt1_val in opt1_index_map:
+                tier_index.append(opt1_index_map[opt1_val])
+            if opt2_val and opt2_val in opt2_index_map:
+                tier_index.append(opt2_index_map[opt2_val])
+            
+            if tier_index:  # 只有有對應索引才加入
+                model_list.append({
+                    "tier_index": tier_index,
+                    "normal_stock": stock,
+                    "original_price": variant_price
+                })
+        
+        # 加入規格設定到商品資料
+        if tier_variation and model_list:
+            shopee_product["tier_variation"] = tier_variation
+            shopee_product["model"] = model_list
+            # 多規格商品不需要設定 normal_stock 和 seller_stock
+            del shopee_product["normal_stock"]
+            del shopee_product["seller_stock"]
+    
+    # 備貨設定：根據參數決定是否較長備貨
+    if pre_order:
+        shopee_product["pre_order"] = {
+            "is_pre_order": True,
+            "days_to_ship": days_to_ship
+        }
+    else:
+        # 一般出貨（非較長備貨）
+        shopee_product["pre_order"] = {
+            "is_pre_order": False
+        }
+        shopee_product["days_to_ship"] = 2  # 一般出貨預設 2 天
     
     # 商品屬性 - 根據分類 ID 動態設定
     # 食品類分類列表（需要完整食品屬性）
