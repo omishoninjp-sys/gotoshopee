@@ -418,7 +418,6 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
         
         # 建立 model（每個變體的價格和庫存）
         model_list = []
-        seller_stock_list = []
         
         for v in variants:
             variant_price = round(float(v.get("price", 0)) * exchange_rate * markup_rate)
@@ -446,19 +445,17 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
             if tier_index:  # 只有有對應索引才加入
                 model_list.append({
                     "tier_index": tier_index,
-                    "original_price": variant_price
+                    "original_price": variant_price,
+                    "stock": variant_stock  # 在 model 裡直接設定庫存
                 })
-                # 建立對應的 seller_stock（使用該 variant 的庫存）
-                seller_stock_list.append({"stock": variant_stock})
         
         # 加入規格設定到商品資料
         if tier_variation and model_list:
             shopee_product["tier_variation"] = tier_variation
             shopee_product["model"] = model_list
-            # 多規格商品需要設定對應的 seller_stock
-            shopee_product["seller_stock"] = seller_stock_list
-            # 移除單規格的庫存設定
+            # 移除單規格的庫存設定（多規格用 model 裡的 stock）
             del shopee_product["normal_stock"]
+            del shopee_product["seller_stock"]
     
     # 備貨設定：根據參數決定是否較長備貨
     if pre_order:
