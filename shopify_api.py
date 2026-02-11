@@ -130,13 +130,15 @@ class ShopifyAPI:
         """獲取某個系列中的商品（使用 GraphQL 獲取繁體中文翻譯）"""
         
         # 使用 GraphQL API 獲取商品及翻譯
+        # 加入 status:ACTIVE 只獲取已發布的商品（排除草稿和已封存）
         query = """
         query getProducts($first: Int!) {
-            products(first: $first, query: "collection_id:%s") {
+            products(first: $first, query: "collection_id:%s AND status:ACTIVE") {
                 nodes {
                     id
                     title
                     handle
+                    status
                     descriptionHtml
                     vendor
                     productType

@@ -365,90 +365,80 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
         }
     }
     
-    # 商品屬性 - 正式環境 (分類 100656 禮盒)
-    # 下拉選單屬性必須使用 value_id，文字輸入屬性使用 original_value_name
-    shopee_product["attribute_list"] = [
-        # ===== 下拉選單屬性（必須用 value_id）=====
-        {
-            "attribute_id": 102384,  # Region of Origin (TW) 產地
-            "attribute_value_list": [
-                {"value_id": 17007}  # Japan
-            ]
-        },
-        {
-            "attribute_id": 101021,  # Pork Origin Region 豬肉產地
-            "attribute_value_list": [
-                {"value_id": 5549}  # No Pork
-            ]
-        },
-        {
-            "attribute_id": 100095,  # Weight 重量
-            "attribute_value_list": [
-                {"value_id": 613}  # 500g
-            ]
-        },
-        {
-            "attribute_id": 100010,  # shelf lifes 保存期限
-            "attribute_value_list": [
-                {"value_id": 568}  # 2 Months
-            ]
-        },
-        # ===== 文字輸入屬性（使用 original_value_name）=====
-        {
-            "attribute_id": 100975,  # Liable Company Name 負責廠商名稱
-            "attribute_value_list": [
-                {"value_id": 0, "original_value_name": "Omishonin Co., Ltd."}
-            ]
-        },
-        {
-            "attribute_id": 100976,  # Liable Company Address 負責廠商地址
-            "attribute_value_list": [
-                {"value_id": 0, "original_value_name": "New Ryogoku Heights 303, 1-28-4 Midori, Sumida-ku, Tokyo, 130-0021, Japan"}
-            ]
-        },
-        {
-            "attribute_id": 100977,  # Liable Company Tel No. 負責廠商電話
-            "attribute_value_list": [
-                {"value_id": 0, "original_value_name": "+81 0366593195"}
-            ]
-        },
-        {
-            "attribute_id": 100974,  # Ingredient 成分
-            "attribute_value_list": [
-                {"value_id": 0, "original_value_name": "詳見商品包裝"}
-            ]
-        },
-        {
-            "attribute_id": 100999,  # Quantity 數量
-            "attribute_value_list": [
-                {"value_id": 0, "original_value_name": "1"}
-            ]
-        },
-        {
-            "attribute_id": 102564,  # Food Additives 食品添加物
-            "attribute_value_list": [
-                {"value_id": 0, "original_value_name": "詳見商品包裝"}
-            ]
-        },
-        {
-            "attribute_id": 102565,  # Nutrition Facts 營養標示
-            "attribute_value_list": [
-                {"value_id": 0, "original_value_name": "詳見商品包裝"}
-            ]
-        },
-        {
-            "attribute_id": 102566,  # GMO Indication 基改標示
-            "attribute_value_list": [
-                {"value_id": 0, "original_value_name": "本產品不含基因改造成分"}
-            ]
-        },
-        {
-            "attribute_id": 102567,  # Other Regulatory Requirements 其他法規
-            "attribute_value_list": [
-                {"value_id": 0, "original_value_name": "詳見商品包裝"}
-            ]
-        }
+    # 商品屬性 - 根據分類 ID 動態設定
+    # 食品類分類列表（需要完整食品屬性）
+    FOOD_CATEGORY_IDS = [
+        100629,  # Food & Beverages
+        100656,  # Gift Set & Hampers
+        100630,  # Snacks
+        100631,  # Beverages
+        100632,  # Dairy & Eggs
+        100633,  # Breakfast Cereals & Spread
+        100634,  # Baking Needs
+        100635,  # Cooking Essentials
+        100636,  # Food Staples
+        100637,  # Convenience / Ready-to-eat
     ]
+    
+    if category_id in FOOD_CATEGORY_IDS:
+        # 食品類分類：使用完整的食品屬性
+        shopee_product["attribute_list"] = [
+            {
+                "attribute_id": 102384,  # Region of Origin (TW) 產地
+                "attribute_value_list": [{"value_id": 17007}]  # Japan
+            },
+            {
+                "attribute_id": 101021,  # Pork Origin Region 豬肉產地
+                "attribute_value_list": [{"value_id": 5549}]  # No Pork
+            },
+            {
+                "attribute_id": 100095,  # Weight 重量
+                "attribute_value_list": [{"value_id": 613}]  # 500g
+            },
+            {
+                "attribute_id": 100010,  # shelf lifes 保存期限
+                "attribute_value_list": [{"value_id": 568}]  # 2 Months
+            },
+            {
+                "attribute_id": 100975,  # Liable Company Name
+                "attribute_value_list": [{"value_id": 0, "original_value_name": "Omishonin Co., Ltd."}]
+            },
+            {
+                "attribute_id": 100976,  # Liable Company Address
+                "attribute_value_list": [{"value_id": 0, "original_value_name": "New Ryogoku Heights 303, 1-28-4 Midori, Sumida-ku, Tokyo, 130-0021, Japan"}]
+            },
+            {
+                "attribute_id": 100977,  # Liable Company Tel No.
+                "attribute_value_list": [{"value_id": 0, "original_value_name": "+81 0366593195"}]
+            },
+            {
+                "attribute_id": 100974,  # Ingredient 成分
+                "attribute_value_list": [{"value_id": 0, "original_value_name": "詳見商品包裝"}]
+            },
+            {
+                "attribute_id": 100999,  # Quantity 數量
+                "attribute_value_list": [{"value_id": 0, "original_value_name": "1"}]
+            },
+            {
+                "attribute_id": 102564,  # Food Additives 食品添加物
+                "attribute_value_list": [{"value_id": 0, "original_value_name": "詳見商品包裝"}]
+            },
+            {
+                "attribute_id": 102565,  # Nutrition Facts 營養標示
+                "attribute_value_list": [{"value_id": 0, "original_value_name": "詳見商品包裝"}]
+            },
+            {
+                "attribute_id": 102566,  # GMO Indication 基改標示
+                "attribute_value_list": [{"value_id": 0, "original_value_name": "本產品不含基因改造成分"}]
+            },
+            {
+                "attribute_id": 102567,  # Other Regulatory Requirements
+                "attribute_value_list": [{"value_id": 0, "original_value_name": "詳見商品包裝"}]
+            }
+        ]
+    else:
+        # 非食品類分類：不加入屬性（讓蝦皮用預設值或用戶手動補充）
+        shopee_product["attribute_list"] = []
     
     return shopee_product
 
