@@ -446,7 +446,6 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
             if tier_index:  # 只有有對應索引才加入
                 model_list.append({
                     "tier_index": tier_index,
-                    "normal_stock": variant_stock,
                     "original_price": variant_price
                 })
                 # 建立對應的 seller_stock（使用該 variant 的庫存）
