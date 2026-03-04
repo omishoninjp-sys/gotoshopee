@@ -5,22 +5,42 @@ import time
 import requests
 from flask import Flask, redirect, request, jsonify
 
-from config import PARTNER_ID, PARTNER_KEY, HOST, REDIRECT_URL
+from config import PARTNER_ID, PARTNER_KEY, HOST, REDIRECT_URL, SHOPEE_REGIONS
 from shopee_auth import build_auth_url, build_api_url, get_timestamp, generate_sign
 
 app = Flask(__name__)
 
 # 儲存 token（正式環境應該用資料庫）
+# 結構：{ "TW": { "access_token": ..., "shop_id": ... }, "TH": { ... } }
 token_storage = {}
+
+# 當前選擇的站點
+current_region = "TW"
+
+def get_current_token():
+    """取得當前站點的 token"""
+    return token_storage.get(current_region, {})
+
+def set_current_token(data):
+    """設定當前站點的 token"""
+    token_storage[current_region] = data
 
 
 @app.route("/")
 def index():
     """首頁"""
+    global current_region
     
-    if token_storage.get("access_token"):
+    # 如果有 region 參數，切換站點
+    if request.args.get("region"):
+        current_region = request.args.get("region")
+    
+    current_token = get_current_token()
+    region_info = SHOPEE_REGIONS.get(current_region, {})
+    
+    if current_token.get("access_token"):
         status_class = "connected"
-        status_text = f"已連接商店 (Shop ID: {token_storage.get('shop_id')})"
+        status_text = f"已連接 {region_info.get('flag', '')} {region_info.get('name', '')} 商店 (Shop ID: {current_token.get('shop_id')})"
         action_html = """
         <a class="btn" href="/sync">🔄 商品同步測試</a>
         <a class="btn" href="/shop-info">查看商店資訊</a>
@@ -28,8 +48,33 @@ def index():
         """
     else:
         status_class = "disconnected"
-        status_text = "尚未授權"
+        status_text = f"{region_info.get('flag', '')} {region_info.get('name', '')} 尚未授權"
         action_html = '<a class="btn" href="/auth">連接蝦皮商店</a>'
+    
+    # 建立站點選擇按鈕
+    region_buttons = ""
+    for code, info in SHOPEE_REGIONS.items():
+        token = token_storage.get(code, {})
+        is_current = code == current_region
+        has_token = bool(token.get("access_token"))
+        
+        btn_class = "region-btn"
+        if is_current:
+            btn_class += " active"
+        if has_token:
+            btn_class += " connected"
+        
+        region_buttons += f'<a href="/?region={code}" class="{btn_class}">{info["flag"]} {info["name"]}</a>'
+    
+    # 顯示已授權的商店列表
+    shop_list = ""
+    for code, token in token_storage.items():
+        if token.get("access_token"):
+            info = SHOPEE_REGIONS.get(code, {})
+            shop_list += f'<div class="shop-item">{info.get("flag", "")} {info.get("name", "")}: Shop ID {token.get("shop_id")}</div>'
+    
+    if not shop_list:
+        shop_list = '<div class="shop-item">尚無已授權商店</div>'
     
     html = f"""
     <!DOCTYPE html>
@@ -37,24 +82,49 @@ def index():
     <head>
         <title>Goyoutati Shopee Sync</title>
         <style>
-            body {{ font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }}
+            body {{ font-family: Arial, sans-serif; max-width: 900px; margin: 50px auto; padding: 20px; }}
             .btn {{ display: inline-block; padding: 10px 20px; background: #ee4d2d; color: white; 
                    text-decoration: none; border-radius: 5px; margin: 10px 5px; }}
             .btn:hover {{ background: #d73211; }}
             .status {{ padding: 15px; border-radius: 5px; margin: 20px 0; }}
             .connected {{ background: #d4edda; color: #155724; }}
             .disconnected {{ background: #f8d7da; color: #721c24; }}
+            
+            .region-selector {{ margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 8px; }}
+            .region-selector h3 {{ margin-top: 0; }}
+            .region-btn {{ display: inline-block; padding: 8px 15px; margin: 5px; background: #e9ecef; 
+                          color: #333; text-decoration: none; border-radius: 5px; border: 2px solid transparent; }}
+            .region-btn:hover {{ background: #dee2e6; }}
+            .region-btn.active {{ border-color: #ee4d2d; background: #fff; }}
+            .region-btn.connected {{ position: relative; }}
+            .region-btn.connected::after {{ content: "✓"; position: absolute; top: -5px; right: -5px; 
+                                           background: #28a745; color: white; border-radius: 50%; 
+                                           width: 18px; height: 18px; font-size: 12px; line-height: 18px; text-align: center; }}
+            
+            .shop-list {{ margin: 20px 0; padding: 15px; background: #fff; border: 1px solid #ddd; border-radius: 8px; }}
+            .shop-item {{ padding: 8px 0; border-bottom: 1px solid #eee; }}
+            .shop-item:last-child {{ border-bottom: none; }}
         </style>
     </head>
     <body>
         <h1>🛒 Goyoutati Shopee Sync</h1>
-        <p>Shopify 商品同步到蝦皮</p>
+        <p>Shopify 商品同步到蝦皮（多站點支援）</p>
+        
+        <div class="region-selector">
+            <h3>🌏 選擇站點</h3>
+            {region_buttons}
+        </div>
         
         <div class="status {status_class}">
             <strong>狀態：</strong> {status_text}
         </div>
         
         {action_html}
+        
+        <div class="shop-list">
+            <h3>📋 已授權商店</h3>
+            {shop_list}
+        </div>
         
         <hr>
         <p><a href="/debug">Debug 資訊</a> | <a href="/token-status">Token 狀態</a></p>
@@ -138,16 +208,20 @@ def callback():
     data = response.json()
     
     if "access_token" in data:
-        token_storage["access_token"] = data["access_token"]
-        token_storage["refresh_token"] = data["refresh_token"]
-        token_storage["shop_id"] = shop_id
-        token_storage["expire_in"] = data.get("expire_in", 14400)
+        # 儲存到當前選擇的站點
+        token_storage[current_region] = {
+            "access_token": data["access_token"],
+            "refresh_token": data["refresh_token"],
+            "shop_id": shop_id,
+            "expire_in": data.get("expire_in", 14400)
+        }
         return redirect("/?auth=success")
     
     # 顯示 debug 資訊
     return jsonify({
         "error": "Failed to get access token",
         "response": data,
+        "current_region": current_region,
         "debug": {
             "host": HOST,
             "partner_id": PARTNER_ID,
@@ -166,8 +240,9 @@ def callback():
 @app.route("/refresh-token")
 def refresh_token():
     """刷新 access_token"""
-    if not token_storage.get("refresh_token"):
-        return jsonify({"error": "No refresh token available"}), 400
+    current_token = get_current_token()
+    if not current_token.get("refresh_token"):
+        return jsonify({"error": "No refresh token available", "region": current_region}), 400
     
     path = "/api/v2/auth/access_token/get"
     timestamp = get_timestamp()
@@ -181,8 +256,8 @@ def refresh_token():
     url = f"{HOST}{path}?partner_id={PARTNER_ID}&timestamp={timestamp}&sign={sign}"
     
     body = {
-        "refresh_token": token_storage["refresh_token"],
-        "shop_id": token_storage["shop_id"],
+        "refresh_token": current_token["refresh_token"],
+        "shop_id": current_token["shop_id"],
         "partner_id": int(PARTNER_ID)
     }
     
@@ -190,9 +265,9 @@ def refresh_token():
     data = response.json()
     
     if "access_token" in data:
-        token_storage["access_token"] = data["access_token"]
-        token_storage["refresh_token"] = data["refresh_token"]
-        return jsonify({"message": "Token refreshed", "expire_in": data.get("expire_in")})
+        token_storage[current_region]["access_token"] = data["access_token"]
+        token_storage[current_region]["refresh_token"] = data["refresh_token"]
+        return jsonify({"message": "Token refreshed", "region": current_region, "expire_in": data.get("expire_in")})
     else:
         return jsonify({"error": "Failed to refresh token", "response": data}), 400
 
@@ -200,25 +275,36 @@ def refresh_token():
 @app.route("/token-status")
 def token_status():
     """查看 token 狀態"""
+    current_token = get_current_token()
+    all_regions = {}
+    for code, token in token_storage.items():
+        all_regions[code] = {
+            "has_token": bool(token.get("access_token")),
+            "shop_id": token.get("shop_id")
+        }
+    
     return jsonify({
-        "has_access_token": bool(token_storage.get("access_token")),
-        "has_refresh_token": bool(token_storage.get("refresh_token")),
-        "shop_id": token_storage.get("shop_id"),
-        "expire_in": token_storage.get("expire_in")
+        "current_region": current_region,
+        "has_access_token": bool(current_token.get("access_token")),
+        "has_refresh_token": bool(current_token.get("refresh_token")),
+        "shop_id": current_token.get("shop_id"),
+        "all_regions": all_regions,
+        "expire_in": current_token.get("expire_in")
     })
 
 
 @app.route("/shop-info")
 def shop_info():
     """取得商店資訊"""
-    if not token_storage.get("access_token"):
-        return jsonify({"error": "Not authorized yet"}), 401
+    current_token = get_current_token()
+    if not current_token.get("access_token"):
+        return jsonify({"error": "Not authorized yet", "region": current_region}), 401
     
     path = "/api/v2/shop/get_shop_info"
     url = build_api_url(
         path,
-        access_token=token_storage["access_token"],
-        shop_id=token_storage["shop_id"]
+        access_token=current_token["access_token"],
+        shop_id=current_token["shop_id"]
     )
     
     response = requests.get(url)
@@ -230,8 +316,14 @@ def shop_info():
 @app.route("/sync")
 def sync_page():
     """商品同步測試頁面"""
-    if not token_storage.get("access_token"):
+    current_token = get_current_token()
+    if not current_token.get("access_token"):
         return redirect("/auth")
+    
+    region_info = SHOPEE_REGIONS.get(current_region, {})
+    region_flag = region_info.get('flag', '')
+    region_name = region_info.get('name', '')
+    shop_id = current_token.get('shop_id', '')
     
     html = """
     <!DOCTYPE html>
@@ -282,16 +374,16 @@ def sync_page():
                              border-radius: 50%; text-align: center; line-height: 28px; margin-right: 10px; font-weight: bold; }
             .loading-spinner { display: inline-block; width: 20px; height: 20px; border: 3px solid #f3f3f3;
                               border-top: 3px solid #ee4d2d; border-radius: 50%; animation: spin 1s linear infinite; margin-left: 10px; }
-            @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+            @keyframes spin { 0%% { transform: rotate(0deg); } 100%% { transform: rotate(360deg); } }
             .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-            .progress-bar { width: 100%; height: 20px; background: #e0e0e0; border-radius: 10px; overflow: hidden; margin: 10px 0; }
-            .progress-fill { height: 100%; background: linear-gradient(90deg, #ee4d2d, #ff6b35); transition: width 0.3s; }
+            .progress-bar { width: 100%%; height: 20px; background: #e0e0e0; border-radius: 10px; overflow: hidden; margin: 10px 0; }
+            .progress-fill { height: 100%%; background: linear-gradient(90deg, #ee4d2d, #ff6b35); transition: width 0.3s; }
             .collapse-btn { background: none; border: none; color: #ee4d2d; cursor: pointer; font-size: 12px; }
         </style>
     </head>
     <body>
-        <h1>🔄 商品同步測試</h1>
-        <p><a href="/" class="btn btn-secondary">← 返回首頁</a></p>
+        <h1>🔄 商品同步測試 """ + region_flag + " " + region_name + """</h1>
+        <p><a href="/" class="btn btn-secondary">← 返回首頁</a> <span style="margin-left: 15px; color: #666;">Shop ID: """ + str(shop_id) + """</span></p>
         
         <!-- Step 1: 連線測試 -->
         <div class="section">
@@ -1116,14 +1208,14 @@ def api_shopify_products(collection_id):
 @app.route("/api/shopee/categories")
 def api_shopee_categories():
     """獲取蝦皮分類"""
-    if not token_storage.get("access_token"):
+    if not get_current_token().get("access_token"):
         return jsonify({"success": False, "error": "Not authorized"})
     
     from shopee_product import get_categories
     
     result = get_categories(
-        token_storage["access_token"],
-        token_storage["shop_id"]
+        get_current_token()["access_token"],
+        get_current_token()["shop_id"]
     )
     
     return jsonify(result)
@@ -1132,14 +1224,14 @@ def api_shopee_categories():
 @app.route("/api/shopee/logistics")
 def api_shopee_logistics():
     """獲取蝦皮物流"""
-    if not token_storage.get("access_token"):
+    if not get_current_token().get("access_token"):
         return jsonify({"success": False, "error": "Not authorized"})
     
     from shopee_product import get_logistics
     
     result = get_logistics(
-        token_storage["access_token"],
-        token_storage["shop_id"]
+        get_current_token()["access_token"],
+        get_current_token()["shop_id"]
     )
     
     return jsonify(result)
@@ -1148,7 +1240,7 @@ def api_shopee_logistics():
 @app.route("/api/sync/collection", methods=["POST"])
 def api_sync_collection():
     """同步一個系列的商品"""
-    if not token_storage.get("access_token"):
+    if not get_current_token().get("access_token"):
         return jsonify({"success": False, "error": "Not authorized"})
     
     from shopify_api import ShopifyAPI
@@ -1189,8 +1281,8 @@ def api_sync_collection():
         # 0. 先查詢分類屬性，找到產地屬性
         debug_info["steps"].append("Step 0: 查詢分類屬性")
         attrs_result = get_attributes(
-            token_storage["access_token"],
-            token_storage["shop_id"],
+            get_current_token()["access_token"],
+            get_current_token()["shop_id"],
             category_id
         )
         
@@ -1317,8 +1409,8 @@ def api_sync_collection():
                     debug_info["steps"].append(f"  上傳圖片 {i+1}/{min(len(image_urls), 9)}...")
                     
                     upload_result = upload_image(
-                        token_storage["access_token"],
-                        token_storage["shop_id"],
+                        get_current_token()["access_token"],
+                        get_current_token()["shop_id"],
                         img_url
                     )
                     
@@ -1384,8 +1476,8 @@ def api_sync_collection():
                 debug_info["steps"].append("  創建蝦皮商品...")
                 
                 create_result = create_product(
-                    token_storage["access_token"],
-                    token_storage["shop_id"],
+                    get_current_token()["access_token"],
+                    get_current_token()["shop_id"],
                     shopee_product_data
                 )
                 
@@ -1419,8 +1511,8 @@ def api_sync_collection():
                         if 'shopee_items_cache' not in debug_info:
                             # 取得所有蝦皮商品
                             items_result = get_item_list(
-                                token_storage["access_token"],
-                                token_storage["shop_id"],
+                                get_current_token()["access_token"],
+                                get_current_token()["shop_id"],
                                 offset=0,
                                 page_size=100
                             )
@@ -1429,8 +1521,8 @@ def api_sync_collection():
                                 if item_ids:
                                     # 取得商品詳細資訊
                                     info_result = get_item_base_info(
-                                        token_storage["access_token"],
-                                        token_storage["shop_id"],
+                                        get_current_token()["access_token"],
+                                        get_current_token()["shop_id"],
                                         item_ids[:50]  # API 限制 50 個
                                     )
                                     if info_result.get("success"):
@@ -1455,8 +1547,8 @@ def api_sync_collection():
                         if found_item_id:
                             # 更新價格
                             update_result = update_price(
-                                token_storage["access_token"],
-                                token_storage["shop_id"],
+                                get_current_token()["access_token"],
+                                get_current_token()["shop_id"],
                                 found_item_id,
                                 new_price
                             )
@@ -1521,7 +1613,7 @@ def api_sync_collection():
 @app.route("/api/sync/update-prices", methods=["POST"])
 def api_update_prices():
     """只更新價格（不新增商品）"""
-    if not token_storage.get("access_token"):
+    if not get_current_token().get("access_token"):
         return jsonify({"success": False, "error": "Not authorized"})
     
     from shopify_api import ShopifyAPI
@@ -1552,8 +1644,8 @@ def api_update_prices():
         offset = 0
         while True:
             items_result = get_item_list(
-                token_storage["access_token"],
-                token_storage["shop_id"],
+                get_current_token()["access_token"],
+                get_current_token()["shop_id"],
                 offset=offset,
                 page_size=100
             )
@@ -1565,8 +1657,8 @@ def api_update_prices():
             if item_ids:
                 # 取得商品詳細資訊（包含名稱和價格）
                 info_result = get_item_base_info(
-                    token_storage["access_token"],
-                    token_storage["shop_id"],
+                    get_current_token()["access_token"],
+                    get_current_token()["shop_id"],
                     item_ids[:50]
                 )
                 if info_result.get("success"):
@@ -1652,8 +1744,8 @@ def api_update_prices():
                 else:
                     # 更新價格
                     update_result = update_price(
-                        token_storage["access_token"],
-                        token_storage["shop_id"],
+                        get_current_token()["access_token"],
+                        get_current_token()["shop_id"],
                         item_id,
                         new_price
                     )
