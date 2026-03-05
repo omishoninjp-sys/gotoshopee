@@ -1274,6 +1274,53 @@ def api_shopee_logistics():
     return jsonify(result)
 
 
+@app.route("/api/shopee/attributes/<int:category_id>")
+def api_shopee_attributes(category_id):
+    """獲取分類屬性（用於除錯）"""
+    if not get_current_token().get("access_token"):
+        return jsonify({"success": False, "error": "Not authorized"})
+    
+    from shopee_product import get_attributes, find_mandatory_attributes
+    
+    result = get_attributes(
+        get_current_token()["access_token"],
+        get_current_token()["shop_id"],
+        category_id,
+        language="en"
+    )
+    
+    if result.get("success"):
+        attributes = result.get("attributes", [])
+        
+        # 找出必填屬性
+        mandatory = find_mandatory_attributes(attributes, "Japan")
+        
+        # 簡化屬性資訊用於除錯
+        simplified = []
+        for attr in attributes:
+            simplified.append({
+                "id": attr.get("attribute_id"),
+                "name": attr.get("original_attribute_name"),
+                "display_name": attr.get("display_attribute_name"),
+                "is_mandatory": attr.get("is_mandatory"),
+                "mandatory": attr.get("mandatory"),
+                "input_type": attr.get("input_type"),
+                "values_count": len(attr.get("attribute_value_list", [])),
+                "first_values": [v.get("original_value_name") for v in attr.get("attribute_value_list", [])[:5]]
+            })
+        
+        return jsonify({
+            "success": True,
+            "category_id": category_id,
+            "total_attributes": len(attributes),
+            "mandatory_found": len(mandatory),
+            "mandatory_attrs": mandatory,
+            "attributes": simplified
+        })
+    
+    return jsonify(result)
+
+
 @app.route("/api/sync/collection", methods=["POST"])
 def api_sync_collection():
     """同步一個系列的商品"""
