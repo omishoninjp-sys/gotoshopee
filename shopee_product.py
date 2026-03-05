@@ -179,6 +179,135 @@ def find_country_of_origin_attribute(attributes: list, target_country: str = "Ja
     
     return None
 
+
+def find_mandatory_attributes(attributes: list, target_country: str = "Japan"):
+    """
+    找到所有必填屬性並設定預設值
+    
+    Args:
+        attributes: 蝦皮分類屬性列表
+        target_country: 目標產地名稱
+    
+    Returns:
+        必填屬性列表 [{"attribute_id": xxx, "attribute_value_list": [...]}]
+    """
+    mandatory_attrs = []
+    
+    # 預設值對照表（根據屬性名稱）
+    default_values = {
+        # 材質相關
+        "material": ["other", "others", "อื่นๆ", "其他", "mixed", "ผสม"],
+        "材質": ["other", "others", "อื่นๆ", "其他", "mixed"],
+        "วัสดุ": ["other", "others", "อื่นๆ", "其他", "mixed"],
+        
+        # 產地相關 - 由 target_country 決定
+        "country": None,  # 會在下面特別處理
+        "origin": None,
+        "region": None,
+        "產地": None,
+        "ประเทศ": None,
+        
+        # 品牌授權
+        "brand license": ["no brand", "no", "ไม่มี", "無", "none"],
+        "license": ["no brand", "no", "ไม่มี", "無", "none"],
+        "授權": ["no brand", "no", "ไม่มี", "無", "none"],
+        
+        # 狀況/新舊
+        "condition": ["new", "ใหม่", "新品", "brand new"],
+        "狀況": ["new", "ใหม่", "新品", "brand new"],
+        "สภาพ": ["new", "ใหม่", "新品", "brand new"],
+        
+        # 圖案
+        "pattern": ["solid", "plain", "other", "อื่นๆ", "其他", "พิมพ์ลาย"],
+        "圖案": ["solid", "plain", "other", "อื่นๆ", "其他"],
+        "ลาย": ["solid", "plain", "other", "อื่นๆ", "其他"],
+        
+        # 加大尺碼
+        "plus size": ["no", "ไม่", "否", "ไม่ใช่"],
+        "加大": ["no", "ไม่", "否"],
+        
+        # 客製化
+        "custom": ["no", "ไม่", "否", "ไม่ใช่"],
+        "客製": ["no", "ไม่", "否"],
+        
+        # 保養說明
+        "care": ["see product label", "see label", "ดูฉลากสินค้า", "詳見商品標籤"],
+        "保養": ["see product label", "see label", "ดูฉลากสินค้า", "詳見商品標籤"],
+    }
+    
+    # 產地別名
+    country_aliases = {
+        "Japan": ["japan", "日本", "jp", "jpn", "ญี่ปุ่น"],
+        "China": ["china", "中國", "中国", "cn", "จีน"],
+        "Taiwan": ["taiwan", "台灣", "台湾", "tw", "ไต้หวัน"],
+        "Korea": ["korea", "韓國", "韩国", "kr", "เกาหลี"],
+        "United States": ["united states", "usa", "us", "美國", "อเมริกา"],
+        "Thailand": ["thailand", "泰國", "泰国", "th", "ไทย"],
+        "Other": ["other", "其他", "others", "อื่นๆ"]
+    }
+    
+    for attr in attributes:
+        # 只處理必填屬性
+        if not attr.get("is_mandatory", False):
+            continue
+        
+        attr_id = attr.get("attribute_id")
+        attr_name = (attr.get("original_attribute_name", "") + " " + attr.get("display_attribute_name", "")).lower()
+        values = attr.get("attribute_value_list", [])
+        
+        # 嘗試找到合適的預設值
+        selected_value_id = 0
+        selected_value_name = ""
+        
+        # 檢查是否為產地屬性
+        is_country_attr = any(kw in attr_name for kw in ["country", "origin", "region", "產地", "ประเทศ"])
+        
+        if is_country_attr:
+            # 產地屬性：使用指定的國家
+            target_aliases = country_aliases.get(target_country, [target_country.lower()])
+            for val in values:
+                val_name = (val.get("original_value_name", "") + " " + val.get("display_value_name", "")).lower()
+                for alias in target_aliases:
+                    if alias in val_name:
+                        selected_value_id = val.get("value_id", 0)
+                        selected_value_name = val.get("original_value_name", target_country)
+                        break
+                if selected_value_id:
+                    break
+        else:
+            # 其他屬性：嘗試匹配預設值
+            for key, default_list in default_values.items():
+                if key in attr_name and default_list:
+                    for val in values:
+                        val_name = (val.get("original_value_name", "") + " " + val.get("display_value_name", "")).lower()
+                        for default in default_list:
+                            if default.lower() in val_name:
+                                selected_value_id = val.get("value_id", 0)
+                                selected_value_name = val.get("original_value_name", default)
+                                break
+                        if selected_value_id:
+                            break
+                    if selected_value_id:
+                        break
+        
+        # 如果找不到匹配的預設值，使用第一個可用的值
+        if not selected_value_id and values:
+            first_val = values[0]
+            selected_value_id = first_val.get("value_id", 0)
+            selected_value_name = first_val.get("original_value_name", "")
+        
+        # 加入必填屬性列表
+        if selected_value_id or selected_value_name:
+            mandatory_attrs.append({
+                "attribute_id": attr_id,
+                "attribute_value_list": [{
+                    "value_id": selected_value_id,
+                    "original_value_name": selected_value_name
+                }]
+            })
+    
+    return mandatory_attrs
+
 def upload_image(access_token: str, shop_id: int, image_url: str):
     """上傳圖片到蝦皮 MediaSpace"""
     debug_info = {"step": "upload_image", "image_url": image_url}
@@ -393,7 +522,7 @@ def create_product(access_token: str, shop_id: int, product_data: dict):
             "debug": debug_info
         }
 
-def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids: list, collection_title: str = "", country_origin_attr: dict = None, exchange_rate: float = 0.21, markup_rate: float = 1.05, pre_order: bool = True, days_to_ship: int = 4, target_lang: str = "zh-TW", size_chart_id: str = ""):
+def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids: list, collection_title: str = "", country_origin_attr: dict = None, exchange_rate: float = 0.21, markup_rate: float = 1.05, pre_order: bool = True, days_to_ship: int = 4, target_lang: str = "zh-TW", size_chart_id: str = "", mandatory_attrs: list = None):
     """
     將 Shopify 商品轉換為蝦皮商品格式
     
@@ -409,6 +538,7 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
         days_to_ship: 備貨天數，預設 4 天
         target_lang: 目標語言代碼，預設 "zh-TW"（繁體中文）
         size_chart_id: 尺碼表圖片 ID（從 upload_size_chart 取得）
+        mandatory_attrs: 必填屬性列表（來自 find_mandatory_attributes）
     """
     # 取得價格和選項資訊
     variants = shopify_product.get("variants", [])
@@ -694,8 +824,11 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
             }
         ]
     else:
-        # 非食品類分類：不加入屬性（讓蝦皮用預設值或用戶手動補充）
-        shopee_product["attribute_list"] = []
+        # 非食品類分類：使用必填屬性（如果有的話）
+        if mandatory_attrs:
+            shopee_product["attribute_list"] = mandatory_attrs
+        else:
+            shopee_product["attribute_list"] = []
     
     return shopee_product
 

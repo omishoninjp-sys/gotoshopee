@@ -1281,7 +1281,7 @@ def api_sync_collection():
         return jsonify({"success": False, "error": "Not authorized"})
     
     from shopify_api import ShopifyAPI
-    from shopee_product import upload_image, create_product, shopify_to_shopee_product, get_attributes, find_country_of_origin_attribute
+    from shopee_product import upload_image, create_product, shopify_to_shopee_product, get_attributes, find_country_of_origin_attribute, find_mandatory_attributes
     
     data = request.json
     collection_id = data.get("collection_id")
@@ -1331,16 +1331,27 @@ def api_sync_collection():
         )
         
         country_origin_attr = None
+        mandatory_attrs = []
         if attrs_result.get("success"):
             attributes = attrs_result.get("attributes", [])
             debug_info["attributes_count"] = len(attributes)
+            
+            # 找到產地屬性
             country_origin_attr = find_country_of_origin_attribute(attributes, region_of_origin)
             
             if country_origin_attr:
                 debug_info["steps"].append(f"  ✅ 找到產地屬性 (ID: {country_origin_attr.get('attribute_id')}, 產地: {region_of_origin})")
                 debug_info["country_origin_attr"] = country_origin_attr
             else:
-                debug_info["steps"].append("  ⚠️ 未找到產地屬性，將嘗試不帶屬性創建")
+                debug_info["steps"].append("  ⚠️ 未找到產地屬性")
+            
+            # 找到所有必填屬性並設定預設值
+            mandatory_attrs = find_mandatory_attributes(attributes, region_of_origin)
+            if mandatory_attrs:
+                debug_info["steps"].append(f"  ✅ 找到 {len(mandatory_attrs)} 個必填屬性並設定預設值")
+                debug_info["mandatory_attrs_count"] = len(mandatory_attrs)
+            else:
+                debug_info["steps"].append("  ⚠️ 未找到必填屬性")
         else:
             debug_info["steps"].append(f"  ⚠️ 查詢屬性失敗: {attrs_result.get('error')}")
         
@@ -1524,7 +1535,8 @@ def api_sync_collection():
                     pre_order,  # 是否較長備貨
                     days_to_ship,  # 備貨天數
                     target_lang,  # 目標語言
-                    size_chart_id  # 尺碼表 ID
+                    "",  # 尺碼表 ID（已移到圖片列表中）
+                    mandatory_attrs  # 必填屬性列表
                 )
                 
                 # 更新物流設定
