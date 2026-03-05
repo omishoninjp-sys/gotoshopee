@@ -119,28 +119,62 @@ def get_attributes(access_token: str, shop_id: int, category_id: int, language: 
         }
 
 
-def find_country_of_origin_attribute(attributes: list):
-    """從屬性列表中找到產地屬性"""
-    country_keywords = ["country", "origin", "產地", "原產地"]
+def find_country_of_origin_attribute(attributes: list, target_country: str = "Japan"):
+    """
+    從屬性列表中找到產地屬性
+    
+    Args:
+        attributes: 蝦皮分類屬性列表
+        target_country: 目標產地名稱 (例如: "Japan", "China", "Taiwan" 等)
+    
+    Returns:
+        產地屬性資訊 {"attribute_id": xxx, "value_id": xxx, "original_value_name": "Japan"}
+    """
+    country_keywords = ["country", "origin", "產地", "原產地", "region"]
+    
+    # 產地名稱對照表（用於匹配蝦皮屬性值）
+    country_aliases = {
+        "Japan": ["japan", "日本", "jp", "jpn"],
+        "China": ["china", "中國", "中国", "cn", "chn", "大陸", "大陆"],
+        "Taiwan": ["taiwan", "台灣", "台湾", "tw", "twn"],
+        "Korea": ["korea", "韓國", "韩国", "kr", "kor", "south korea"],
+        "United States": ["united states", "usa", "us", "美國", "美国", "america"],
+        "Thailand": ["thailand", "泰國", "泰国", "th", "tha"],
+        "Vietnam": ["vietnam", "越南", "vn", "vnm"],
+        "Indonesia": ["indonesia", "印尼", "id", "idn"],
+        "Malaysia": ["malaysia", "馬來西亞", "马来西亚", "my", "mys"],
+        "Singapore": ["singapore", "新加坡", "sg", "sgp"],
+        "Other": ["other", "其他", "others"]
+    }
+    
+    # 取得目標產地的別名列表
+    target_aliases = country_aliases.get(target_country, [target_country.lower()])
     
     for attr in attributes:
         attr_name = (attr.get("original_attribute_name", "") + " " + attr.get("display_attribute_name", "")).lower()
         if any(keyword in attr_name for keyword in country_keywords):
-            # 找到產地屬性，嘗試找「日本」的選項
+            # 找到產地屬性
             attr_id = attr.get("attribute_id")
             values = attr.get("attribute_value_list", [])
             
-            japan_value_id = 0
+            # 嘗試找到目標產地的選項
+            target_value_id = 0
+            matched_name = target_country
+            
             for val in values:
                 val_name = (val.get("original_value_name", "") + " " + val.get("display_value_name", "")).lower()
-                if "japan" in val_name or "日本" in val_name:
-                    japan_value_id = val.get("value_id", 0)
+                for alias in target_aliases:
+                    if alias in val_name:
+                        target_value_id = val.get("value_id", 0)
+                        matched_name = val.get("original_value_name", target_country)
+                        break
+                if target_value_id:
                     break
             
             return {
                 "attribute_id": attr_id,
-                "value_id": japan_value_id,
-                "original_value_name": "日本"
+                "value_id": target_value_id,
+                "original_value_name": matched_name
             }
     
     return None

@@ -518,6 +518,32 @@ def sync_page():
             </script>
         </div>
         
+        <!-- Step 4.7: 產地設定 -->
+        <div class="section">
+            <h3><span class="step-indicator">🌏</span>產地設定 (Region of Origin)</h3>
+            <div style="display: flex; gap: 20px; align-items: center; flex-wrap: wrap;">
+                <div>
+                    <label><strong>商品產地：</strong></label>
+                    <select id="region-of-origin" style="padding: 8px 15px; font-size: 14px; border-radius: 5px; border: 1px solid #ddd; min-width: 200px;">
+                        <option value="Japan" selected>🇯🇵 Japan (日本)</option>
+                        <option value="China">🇨🇳 China (中國)</option>
+                        <option value="Taiwan">🇹🇼 Taiwan (台灣)</option>
+                        <option value="Korea">🇰🇷 Korea (韓國)</option>
+                        <option value="United States">🇺🇸 United States (美國)</option>
+                        <option value="Thailand">🇹🇭 Thailand (泰國)</option>
+                        <option value="Vietnam">🇻🇳 Vietnam (越南)</option>
+                        <option value="Indonesia">🇮🇩 Indonesia (印尼)</option>
+                        <option value="Malaysia">🇲🇾 Malaysia (馬來西亞)</option>
+                        <option value="Singapore">🇸🇬 Singapore (新加坡)</option>
+                        <option value="Other">🌍 Other (其他)</option>
+                    </select>
+                </div>
+            </div>
+            <p style="margin-top: 10px; color: #666;">
+                <small>📦 預設為日本，如有例外請選擇正確的產地</small>
+            </p>
+        </div>
+        
         <!-- Step 5: 執行同步 -->
         <div class="section">
             <h3><span class="step-indicator">5</span>執行同步</h3>
@@ -909,6 +935,9 @@ def sync_page():
                 const preOrder = document.getElementById('pre-order').checked;
                 const daysToShip = parseInt(document.getElementById('days-to-ship').value) || 4;
                 
+                // 讀取產地設定
+                const regionOfOrigin = document.getElementById('region-of-origin').value;
+                
                 const testBtn = document.getElementById('test-btn');
                 const syncBtn = document.getElementById('sync-btn');
                 testBtn.disabled = true;
@@ -924,6 +953,7 @@ def sync_page():
                 log('物流渠道: ' + logistics.join(', '), 'dim');
                 log('匯率: ' + exchangeRate + ' | 加成: ' + markupRate + ' | 最低價格: NT$' + minPrice, 'dim');
                 log('較長備貨: ' + (preOrder ? '是 (' + daysToShip + '天)' : '否'), 'dim');
+                log('產地: ' + regionOfOrigin, 'dim');
                 log('系列數量: ' + collections.length, 'dim');
                 log('', 'info');
                 
@@ -961,6 +991,7 @@ def sync_page():
                                     min_price: minPrice,
                                     pre_order: preOrder,
                                     days_to_ship: daysToShip,
+                                    region_of_origin: regionOfOrigin,
                                     limit: currentBatchSize,
                                     offset: offset
                                 })
@@ -1250,7 +1281,7 @@ def api_sync_collection():
         return jsonify({"success": False, "error": "Not authorized"})
     
     from shopify_api import ShopifyAPI
-    from shopee_product import upload_image, upload_size_chart, support_size_chart, create_product, shopify_to_shopee_product, get_attributes, find_country_of_origin_attribute
+    from shopee_product import upload_image, create_product, shopify_to_shopee_product, get_attributes, find_country_of_origin_attribute
     
     data = request.json
     collection_id = data.get("collection_id")
@@ -1262,6 +1293,7 @@ def api_sync_collection():
     min_price = data.get("min_price", 0)  # 最低價格限制
     pre_order = data.get("pre_order", True)  # 是否較長備貨
     days_to_ship = data.get("days_to_ship", 4)  # 備貨天數
+    region_of_origin = data.get("region_of_origin", "Japan")  # 產地
     limit = data.get("limit", 1)
     offset = data.get("offset", 0)  # 分頁偏移量
     
@@ -1279,6 +1311,7 @@ def api_sync_collection():
         "min_price": min_price,
         "pre_order": pre_order,
         "days_to_ship": days_to_ship,
+        "region_of_origin": region_of_origin,
         "target_lang": target_lang,
         "limit": limit,
         "offset": offset,
@@ -1301,10 +1334,10 @@ def api_sync_collection():
         if attrs_result.get("success"):
             attributes = attrs_result.get("attributes", [])
             debug_info["attributes_count"] = len(attributes)
-            country_origin_attr = find_country_of_origin_attribute(attributes)
+            country_origin_attr = find_country_of_origin_attribute(attributes, region_of_origin)
             
             if country_origin_attr:
-                debug_info["steps"].append(f"  ✅ 找到產地屬性 (ID: {country_origin_attr.get('attribute_id')})")
+                debug_info["steps"].append(f"  ✅ 找到產地屬性 (ID: {country_origin_attr.get('attribute_id')}, 產地: {region_of_origin})")
                 debug_info["country_origin_attr"] = country_origin_attr
             else:
                 debug_info["steps"].append("  ⚠️ 未找到產地屬性，將嘗試不帶屬性創建")
