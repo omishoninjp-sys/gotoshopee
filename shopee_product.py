@@ -258,7 +258,7 @@ def create_product(access_token: str, shop_id: int, product_data: dict):
             "debug": debug_info
         }
 
-def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids: list, collection_title: str = "", country_origin_attr: dict = None, exchange_rate: float = 0.21, markup_rate: float = 1.05, pre_order: bool = True, days_to_ship: int = 4):
+def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids: list, collection_title: str = "", country_origin_attr: dict = None, exchange_rate: float = 0.21, markup_rate: float = 1.05, pre_order: bool = True, days_to_ship: int = 4, target_lang: str = "zh-TW"):
     """
     將 Shopify 商品轉換為蝦皮商品格式
     
@@ -272,6 +272,7 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
         markup_rate: 加成比例，預設 1.05
         pre_order: 是否較長備貨，預設 True
         days_to_ship: 備貨天數，預設 4 天
+        target_lang: 目標語言代碼，預設 "zh-TW"（繁體中文）
     """
     # 取得價格和選項資訊
     variants = shopify_product.get("variants", [])
@@ -320,8 +321,11 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
     else:
         stock = 900  # 沒有 variant，設為預設值
     
-    # 標題前綴
-    title_prefix = "日本代購 日本直送 GOYOUTATI "
+    # 引入翻譯模組
+    from translator import translate_product, get_title_prefix, get_desc_prefix
+    
+    # 取得原始標題和描述
+    original_title = shopify_product.get("title", "商品")
     
     # 處理描述（移除 HTML 標籤的簡單方法）
     description = shopify_product.get("body_html", "")
@@ -330,20 +334,27 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
         description = re.sub(r'<[^>]+>', '', description)
     
     if not description:
-        description = shopify_product.get("title", "商品描述")
+        description = original_title
     
-    # 在描述前面加上前綴
-    description_prefix = "日本代購 日本直送 GOYOUTATI\n\n"
+    # 如果目標語言不是繁體中文，進行翻譯
+    if target_lang != "zh-TW":
+        translated_title, translated_desc = translate_product(original_title, description, target_lang)
+        original_title = translated_title
+        description = translated_desc
+    
+    # 取得對應語言的前綴
+    title_prefix = get_title_prefix(target_lang)
+    description_prefix = get_desc_prefix(target_lang)
+    
+    # 加上前綴
+    item_name = title_prefix + original_title
+    item_name = item_name[:120]  # 蝦皮標題上限 120 字
+    
     description = description_prefix + description
     description = description[:3000]  # 蝦皮描述上限
     
     # 從 Shopify vendor 取得品牌名稱，沒有的話用「無品牌」
     brand_name = shopify_product.get("vendor", "")
-    
-    # 處理標題（加上前綴，確保不超過 120 字）
-    original_title = shopify_product.get("title", "商品")
-    item_name = title_prefix + original_title
-    item_name = item_name[:120]  # 蝦皮標題上限 120 字
     
     # 建立蝦皮商品資料
     shopee_product = {

@@ -5,7 +5,7 @@ import time
 import requests
 from flask import Flask, redirect, request, jsonify
 
-from config import PARTNER_ID, PARTNER_KEY, HOST, REDIRECT_URL, SHOPEE_REGIONS
+from config import PARTNER_ID, PARTNER_KEY, HOST, REDIRECT_URL, SHOPEE_REGIONS, TRANSLATIONS, get_translation
 from shopee_auth import build_auth_url, build_api_url, get_timestamp, generate_sign
 
 app = Flask(__name__)
@@ -25,6 +25,12 @@ def set_current_token(data):
     """設定當前站點的 token"""
     token_storage[current_region] = data
 
+def t(key):
+    """取得當前站點語言的翻譯"""
+    region_info = SHOPEE_REGIONS.get(current_region, {})
+    lang = region_info.get("lang", "en")
+    return get_translation(lang, key)
+
 
 @app.route("/")
 def index():
@@ -40,16 +46,16 @@ def index():
     
     if current_token.get("access_token"):
         status_class = "connected"
-        status_text = f"已連接 {region_info.get('flag', '')} {region_info.get('name', '')} 商店 (Shop ID: {current_token.get('shop_id')})"
-        action_html = """
-        <a class="btn" href="/sync">🔄 商品同步測試</a>
-        <a class="btn" href="/shop-info">查看商店資訊</a>
-        <a class="btn" href="/auth">重新授權</a>
+        status_text = t("connected") + f" (Shop ID: {current_token.get('shop_id')})"
+        action_html = f"""
+        <a class="btn" href="/sync">🔄 {t("sync_test")}</a>
+        <a class="btn" href="/shop-info">{t("shop_info")}</a>
+        <a class="btn" href="/auth">{t("reauthorize")}</a>
         """
     else:
         status_class = "disconnected"
-        status_text = f"{region_info.get('flag', '')} {region_info.get('name', '')} 尚未授權"
-        action_html = '<a class="btn" href="/auth">連接蝦皮商店</a>'
+        status_text = t("not_authorized")
+        action_html = f'<a class="btn" href="/auth">{t("connect_shop")}</a>'
     
     # 建立站點選擇按鈕
     region_buttons = ""
@@ -74,13 +80,13 @@ def index():
             shop_list += f'<div class="shop-item">{info.get("flag", "")} {info.get("name", "")}: Shop ID {token.get("shop_id")}</div>'
     
     if not shop_list:
-        shop_list = '<div class="shop-item">尚無已授權商店</div>'
+        shop_list = f'<div class="shop-item">{t("no_shops")}</div>'
     
     html = f"""
     <!DOCTYPE html>
     <html>
     <head>
-        <title>Goyoutati Shopee Sync</title>
+        <title>{t("title")}</title>
         <style>
             body {{ font-family: Arial, sans-serif; max-width: 900px; margin: 50px auto; padding: 20px; }}
             .btn {{ display: inline-block; padding: 10px 20px; background: #ee4d2d; color: white; 
@@ -107,22 +113,22 @@ def index():
         </style>
     </head>
     <body>
-        <h1>🛒 Goyoutati Shopee Sync</h1>
-        <p>Shopify 商品同步到蝦皮（多站點支援）</p>
+        <h1>🛒 {t("title")}</h1>
+        <p>{t("subtitle")}</p>
         
         <div class="region-selector">
-            <h3>🌏 選擇站點</h3>
+            <h3>🌏 {t("select_region")}</h3>
             {region_buttons}
         </div>
         
         <div class="status {status_class}">
-            <strong>狀態：</strong> {status_text}
+            <strong>{t("status")}：</strong> {region_info.get('flag', '')} {region_info.get('name', '')} - {status_text}
         </div>
         
         {action_html}
         
         <div class="shop-list">
-            <h3>📋 已授權商店</h3>
+            <h3>📋 {t("authorized_shops")}</h3>
             {shop_list}
         </div>
         
@@ -1205,6 +1211,20 @@ def api_shopify_products(collection_id):
         return jsonify(result)
 
 
+@app.route("/api/translations")
+def api_translations():
+    """獲取當前站點的翻譯"""
+    region_info = SHOPEE_REGIONS.get(current_region, {})
+    lang = region_info.get("lang", "en")
+    translations = TRANSLATIONS.get(lang, TRANSLATIONS.get("en", {}))
+    return jsonify({
+        "success": True,
+        "region": current_region,
+        "lang": lang,
+        "translations": translations
+    })
+
+
 @app.route("/api/shopee/categories")
 def api_shopee_categories():
     """獲取蝦皮分類"""
@@ -1259,6 +1279,10 @@ def api_sync_collection():
     limit = data.get("limit", 1)
     offset = data.get("offset", 0)  # 分頁偏移量
     
+    # 取得當前站點的語言
+    region_info = SHOPEE_REGIONS.get(current_region, {})
+    target_lang = region_info.get("lang", "zh-TW")
+    
     debug_info = {
         "collection_id": collection_id,
         "collection_title": collection_title,
@@ -1269,6 +1293,7 @@ def api_sync_collection():
         "min_price": min_price,
         "pre_order": pre_order,
         "days_to_ship": days_to_ship,
+        "target_lang": target_lang,
         "limit": limit,
         "offset": offset,
         "steps": [],
@@ -1441,6 +1466,9 @@ def api_sync_collection():
                 
                 # 2c. 轉換商品格式
                 debug_info["steps"].append("  轉換商品格式...")
+                if target_lang != "zh-TW":
+                    debug_info["steps"].append(f"  翻譯成 {target_lang}...")
+                
                 shopee_product_data = shopify_to_shopee_product(
                     product,
                     category_id,
@@ -1450,7 +1478,8 @@ def api_sync_collection():
                     exchange_rate,  # 匯率
                     markup_rate,  # 加成比例
                     pre_order,  # 是否較長備貨
-                    days_to_ship  # 備貨天數
+                    days_to_ship,  # 備貨天數
+                    target_lang  # 目標語言
                 )
                 
                 # 更新物流設定
