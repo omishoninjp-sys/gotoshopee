@@ -836,119 +836,12 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
             }
         ]
     else:
-        # 非食品類分類：使用必填屬性（如果有的話）
-        if mandatory_attrs:
-            shopee_product["attribute_list"] = mandatory_attrs
-        else:
-            # API 無法獲取屬性時，使用預設的分類屬性對照表
-            shopee_product["attribute_list"] = get_default_attributes_for_category(category_id)
+        # 非食品類分類：不傳送屬性（讓蝦皮用預設值或創建為草稿）
+        # 注意：get_attributes API 被暫停，無法動態獲取屬性 ID
+        shopee_product["attribute_list"] = []
     
     return shopee_product
 
-
-def get_default_attributes_for_category(category_id: int) -> list:
-    """
-    根據分類 ID 返回預設的必填屬性
-    當 get_attributes API 不可用時使用
-    
-    蝦皮泰國常見分類的必填屬性
-    """
-    
-    # Fashion Accessories 相關分類 (100009 及其子分類)
-    # 100029 = Necklaces, 100030 = Earrings, 100031 = Rings, etc.
-    FASHION_ACCESSORIES_CATEGORIES = [
-        100009,  # Fashion Accessories
-        100029,  # Necklaces
-        100030,  # Earrings
-        100031,  # Rings
-        100032,  # Bracelets & Bangles
-        100033,  # Brooches & Pins
-        100034,  # Hair Accessories
-        100035,  # Eyewear
-        100036,  # Additional Accessories
-    ]
-    
-    # 服裝相關分類
-    CLOTHING_CATEGORIES = [
-        100001,  # Women Clothes
-        100002,  # Men Clothes
-        100003,  # Muslim Fashion
-    ]
-    
-    # 鞋子相關分類
-    SHOES_CATEGORIES = [
-        100004,  # Women Shoes
-        100005,  # Men Shoes
-    ]
-    
-    # 包包相關分類
-    BAGS_CATEGORIES = [
-        100006,  # Women Bags
-        100007,  # Men Bags
-        100008,  # Luggage & Travel
-    ]
-    
-    # 預設屬性值
-    default_attrs = []
-    
-    if category_id in FASHION_ACCESSORIES_CATEGORIES or (100029 <= category_id <= 100050):
-        # 飾品類：Material 是必填
-        default_attrs = [
-            {
-                "attribute_id": 100845,  # Region of Origin / Country
-                "attribute_value_list": [{"value_id": 1841543, "original_value_name": "Japan"}]
-            },
-            {
-                "attribute_id": 100069,  # Material
-                "attribute_value_list": [{"value_id": 0, "original_value_name": "Metal"}]
-            }
-        ]
-    elif category_id in CLOTHING_CATEGORIES or (100001 <= category_id <= 100003):
-        # 服裝類
-        default_attrs = [
-            {
-                "attribute_id": 100845,  # Region of Origin
-                "attribute_value_list": [{"value_id": 1841543, "original_value_name": "Japan"}]
-            },
-            {
-                "attribute_id": 100069,  # Material
-                "attribute_value_list": [{"value_id": 0, "original_value_name": "Cotton"}]
-            }
-        ]
-    elif category_id in SHOES_CATEGORIES or (100004 <= category_id <= 100005):
-        # 鞋子類
-        default_attrs = [
-            {
-                "attribute_id": 100845,  # Region of Origin
-                "attribute_value_list": [{"value_id": 1841543, "original_value_name": "Japan"}]
-            },
-            {
-                "attribute_id": 100069,  # Material
-                "attribute_value_list": [{"value_id": 0, "original_value_name": "Leather"}]
-            }
-        ]
-    elif category_id in BAGS_CATEGORIES or (100006 <= category_id <= 100008):
-        # 包包類
-        default_attrs = [
-            {
-                "attribute_id": 100845,  # Region of Origin
-                "attribute_value_list": [{"value_id": 1841543, "original_value_name": "Japan"}]
-            },
-            {
-                "attribute_id": 100069,  # Material
-                "attribute_value_list": [{"value_id": 0, "original_value_name": "Canvas"}]
-            }
-        ]
-    else:
-        # 其他分類：只設定產地
-        default_attrs = [
-            {
-                "attribute_id": 100845,  # Region of Origin
-                "attribute_value_list": [{"value_id": 1841543, "original_value_name": "Japan"}]
-            }
-        ]
-    
-    return default_attrs
 
 def get_logistics(access_token: str, shop_id: int):
     """取得可用的物流渠道"""
