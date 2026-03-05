@@ -649,16 +649,17 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
     
     # 庫存：使用 Shopify 實際庫存（單規格用第一個 variant 的庫存）
     # 如果沒追蹤庫存（inventory_quantity 為 900），則維持 900
+    # 如果庫存為 0 或負數，設為 10（代購商品預設庫存）
     if variants:
-        first_variant_stock = variants[0].get("inventory_quantity", 900)
+        first_variant_stock = variants[0].get("inventory_quantity", 10)
         if first_variant_stock is None:
-            stock = 900  # 沒追蹤庫存，設為預設值
-        elif first_variant_stock < 0:
-            stock = 0
+            stock = 10  # 沒追蹤庫存，設為預設值 10
+        elif first_variant_stock <= 0:
+            stock = 10  # 庫存為 0 或負數，設為 10
         else:
             stock = first_variant_stock
     else:
-        stock = 900  # 沒有 variant，設為預設值
+        stock = 10  # 沒有 variant，設為預設值 10
     
     # 引入翻譯模組
     from translator import translate_product, get_title_prefix, get_desc_prefix
@@ -779,12 +780,12 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
                 variant_price = price if price >= 10 else 100
             
             # 取得該 variant 的庫存數量
-            # inventory_quantity 已經在 API 層處理過：null → 900, 負數 → 0
-            variant_stock = v.get("inventory_quantity", 900)
+            # inventory_quantity 已經在 API 層處理過：null → 10, 0或負數 → 10
+            variant_stock = v.get("inventory_quantity", 10)
             if variant_stock is None:
-                variant_stock = 900  # 沒追蹤庫存，設為預設值
-            elif variant_stock < 0:
-                variant_stock = 0
+                variant_stock = 10  # 沒追蹤庫存，設為預設值 10
+            elif variant_stock <= 0:
+                variant_stock = 10  # 庫存為 0 或負數，設為 10
             
             # 取得選項值並找到對應索引
             opt1_val = str(v.get("option1", ""))[:20] if v.get("option1") else None
