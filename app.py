@@ -1250,7 +1250,7 @@ def api_sync_collection():
         return jsonify({"success": False, "error": "Not authorized"})
     
     from shopify_api import ShopifyAPI
-    from shopee_product import upload_image, create_product, shopify_to_shopee_product, get_attributes, find_country_of_origin_attribute
+    from shopee_product import upload_image, upload_size_chart, support_size_chart, create_product, shopify_to_shopee_product, get_attributes, find_country_of_origin_attribute
     
     data = request.json
     collection_id = data.get("collection_id")
@@ -1450,30 +1450,29 @@ def api_sync_collection():
                 
                 debug_info["steps"].append(f"  成功上傳 {len(image_ids)} 張圖片")
                 
-                # 2d-2. 檢測是否為衣服類商品，自動加上尺碼表
+                # 2d-2. 檢測是否為衣服類商品，上傳尺碼表到專用欄位
+                size_chart_id = ""
                 product_tags = product.get("tags", "").split(",") if product.get("tags") else []
                 product_tags = [t.strip() for t in product_tags]
                 
                 if SIZE_CHART_URL and is_clothing_product(product.get("title", ""), collection_title, product_tags):
                     debug_info["steps"].append("  📏 檢測到衣服類商品，上傳尺碼表...")
                     
-                    # 檢查是否還有圖片空間（蝦皮最多 9 張）
-                    if len(image_ids) < 9:
-                        size_chart_result = upload_image(
-                            get_current_token()["access_token"],
-                            get_current_token()["shop_id"],
-                            SIZE_CHART_URL
-                        )
-                        
-                        if size_chart_result.get("success"):
-                            size_chart_id = size_chart_result.get("image_id")
-                            if size_chart_id:
-                                image_ids.append(size_chart_id)
-                                debug_info["steps"].append(f"    ✅ 尺碼表上傳成功 (ID: {size_chart_id})")
+                    # 上傳尺碼表到蝦皮專用欄位
+                    size_chart_result = upload_size_chart(
+                        get_current_token()["access_token"],
+                        get_current_token()["shop_id"],
+                        SIZE_CHART_URL
+                    )
+                    
+                    if size_chart_result.get("success"):
+                        size_chart_id = size_chart_result.get("size_chart_id", "")
+                        if size_chart_id:
+                            debug_info["steps"].append(f"    ✅ 尺碼表上傳成功 (ID: {size_chart_id})")
                         else:
-                            debug_info["steps"].append(f"    ⚠️ 尺碼表上傳失敗: {size_chart_result.get('error')}")
+                            debug_info["steps"].append("    ⚠️ 尺碼表上傳成功但未取得 ID")
                     else:
-                        debug_info["steps"].append("    ⚠️ 圖片已達上限(9張)，跳過尺碼表")
+                        debug_info["steps"].append(f"    ⚠️ 尺碼表上傳失敗: {size_chart_result.get('error')}")
                 
                 # 2c. 轉換商品格式
                 debug_info["steps"].append("  轉換商品格式...")
@@ -1490,7 +1489,8 @@ def api_sync_collection():
                     markup_rate,  # 加成比例
                     pre_order,  # 是否較長備貨
                     days_to_ship,  # 備貨天數
-                    target_lang  # 目標語言
+                    target_lang,  # 目標語言
+                    size_chart_id  # 尺碼表 ID
                 )
                 
                 # 更新物流設定
@@ -1509,7 +1509,8 @@ def api_sync_collection():
                     "brand": shopee_product_data.get("brand"),
                     "attribute_list": shopee_product_data.get("attribute_list"),
                     "image_count": len(image_ids),
-                    "logistic_count": len(logistic_ids)
+                    "logistic_count": len(logistic_ids),
+                    "size_chart": shopee_product_data.get("size_chart", "")
                 }
                 
                 # 2d. 創建蝦皮商品

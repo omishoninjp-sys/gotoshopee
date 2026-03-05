@@ -206,6 +206,107 @@ def upload_image(access_token: str, shop_id: int, image_url: str):
             "debug": debug_info
         }
 
+
+def support_size_chart(access_token: str, shop_id: int, category_id: int):
+    """檢查分類是否支援尺碼表"""
+    debug_info = {"step": "support_size_chart", "category_id": category_id}
+    
+    try:
+        path = "/api/v2/product/support_size_chart"
+        url = build_shop_api_url(path, access_token, shop_id, category_id=category_id)
+        debug_info["url"] = url
+        
+        response = requests.get(url, timeout=30)
+        debug_info["status_code"] = response.status_code
+        
+        data = response.json()
+        debug_info["response"] = data
+        
+        if data.get("error") == "":
+            support = data.get("response", {}).get("support_size_chart", False)
+            return {
+                "success": True,
+                "support": support,
+                "debug": debug_info
+            }
+        else:
+            return {
+                "success": False,
+                "support": False,
+                "error": data.get("message", data.get("error")),
+                "debug": debug_info
+            }
+    except Exception as e:
+        debug_info["exception"] = str(e)
+        return {
+            "success": False,
+            "support": False,
+            "error": str(e),
+            "debug": debug_info
+        }
+
+
+def upload_size_chart(access_token: str, shop_id: int, image_url: str):
+    """上傳尺碼表圖片到蝦皮"""
+    debug_info = {"step": "upload_size_chart", "image_url": image_url}
+    
+    try:
+        # 1. 先下載圖片
+        debug_info["sub_step"] = "downloading_image"
+        img_response = requests.get(image_url, timeout=30)
+        debug_info["download_status"] = img_response.status_code
+        
+        if img_response.status_code != 200:
+            return {
+                "success": False,
+                "error": f"無法下載尺碼表圖片: HTTP {img_response.status_code}",
+                "debug": debug_info
+            }
+        
+        image_data = img_response.content
+        debug_info["image_size"] = len(image_data)
+        
+        # 2. 上傳到蝦皮尺碼表專用 API
+        debug_info["sub_step"] = "uploading_size_chart"
+        path = "/api/v2/product/upload_size_chart"
+        timestamp = get_timestamp()
+        sign = generate_shop_sign(path, timestamp, access_token, shop_id)
+        
+        url = f"{HOST}{path}?partner_id={PARTNER_ID}&timestamp={timestamp}&access_token={access_token}&shop_id={shop_id}&sign={sign}"
+        debug_info["upload_url"] = url
+        
+        files = {
+            'image': ('size_chart.jpg', BytesIO(image_data), 'image/jpeg')
+        }
+        
+        response = requests.post(url, files=files, timeout=60)
+        debug_info["upload_status"] = response.status_code
+        
+        data = response.json()
+        debug_info["response"] = data
+        
+        if data.get("error") == "":
+            size_chart_id = data.get("response", {}).get("size_chart", "")
+            return {
+                "success": True,
+                "size_chart_id": size_chart_id,
+                "debug": debug_info
+            }
+        else:
+            return {
+                "success": False,
+                "error": data.get("message", data.get("error")),
+                "debug": debug_info
+            }
+    except Exception as e:
+        debug_info["exception"] = str(e)
+        return {
+            "success": False,
+            "error": str(e),
+            "debug": debug_info
+        }
+
+
 def create_product(access_token: str, shop_id: int, product_data: dict):
     """
     建立蝦皮商品
@@ -258,7 +359,7 @@ def create_product(access_token: str, shop_id: int, product_data: dict):
             "debug": debug_info
         }
 
-def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids: list, collection_title: str = "", country_origin_attr: dict = None, exchange_rate: float = 0.21, markup_rate: float = 1.05, pre_order: bool = True, days_to_ship: int = 4, target_lang: str = "zh-TW"):
+def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids: list, collection_title: str = "", country_origin_attr: dict = None, exchange_rate: float = 0.21, markup_rate: float = 1.05, pre_order: bool = True, days_to_ship: int = 4, target_lang: str = "zh-TW", size_chart_id: str = ""):
     """
     將 Shopify 商品轉換為蝦皮商品格式
     
@@ -273,6 +374,7 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
         pre_order: 是否較長備貨，預設 True
         days_to_ship: 備貨天數，預設 4 天
         target_lang: 目標語言代碼，預設 "zh-TW"（繁體中文）
+        size_chart_id: 尺碼表圖片 ID（從 upload_size_chart 取得）
     """
     # 取得價格和選項資訊
     variants = shopify_product.get("variants", [])
@@ -387,6 +489,10 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
             "original_brand_name": brand_name if brand_name else "No Brand"
         }
     }
+    
+    # 加入尺碼表（如果有）
+    if size_chart_id:
+        shopee_product["size_chart"] = size_chart_id
     
     # 處理多規格商品
     if has_variants and options:
