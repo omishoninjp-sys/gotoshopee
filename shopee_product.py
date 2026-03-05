@@ -193,24 +193,26 @@ def find_mandatory_attributes(attributes: list, target_country: str = "Japan"):
     """
     mandatory_attrs = []
     
+    # 需要處理的重要屬性名稱（不管是否 mandatory 都要設定）
+    important_attr_keywords = [
+        "material", "材質", "วัสดุ",  # 材質
+        "origin", "country", "region", "產地", "ประเทศ", "แหล่งกำเนิด",  # 產地
+        "condition", "狀況", "สภาพ",  # 狀況
+        "brand license", "license", "授權", "ใบอนุญาต",  # 品牌授權
+    ]
+    
     # 預設值對照表（根據屬性名稱）
     default_values = {
         # 材質相關
-        "material": ["other", "others", "อื่นๆ", "其他", "mixed", "ผสม"],
+        "material": ["other", "others", "อื่นๆ", "其他", "mixed", "ผสม", "metal", "โลหะ"],
         "材質": ["other", "others", "อื่นๆ", "其他", "mixed"],
-        "วัสดุ": ["other", "others", "อื่นๆ", "其他", "mixed"],
-        
-        # 產地相關 - 由 target_country 決定
-        "country": None,  # 會在下面特別處理
-        "origin": None,
-        "region": None,
-        "產地": None,
-        "ประเทศ": None,
+        "วัสดุ": ["other", "others", "อื่นๆ", "其他", "mixed", "โลหะ"],
         
         # 品牌授權
-        "brand license": ["no brand", "no", "ไม่มี", "無", "none"],
-        "license": ["no brand", "no", "ไม่มี", "無", "none"],
+        "brand license": ["no brand", "no", "ไม่มี", "無", "none", "n/a"],
+        "license": ["no brand", "no", "ไม่มี", "無", "none", "n/a", "ไม่มีแบรนด์"],
         "授權": ["no brand", "no", "ไม่มี", "無", "none"],
+        "ใบอนุญาต": ["no brand", "no", "ไม่มี", "無", "none", "ไม่มีแบรนด์"],
         
         # 狀況/新舊
         "condition": ["new", "ใหม่", "新品", "brand new"],
@@ -218,7 +220,7 @@ def find_mandatory_attributes(attributes: list, target_country: str = "Japan"):
         "สภาพ": ["new", "ใหม่", "新品", "brand new"],
         
         # 圖案
-        "pattern": ["solid", "plain", "other", "อื่นๆ", "其他", "พิมพ์ลาย"],
+        "pattern": ["solid", "plain", "other", "อื่นๆ", "其他", "พิมพ์ลาย", "no pattern"],
         "圖案": ["solid", "plain", "other", "อื่นๆ", "其他"],
         "ลาย": ["solid", "plain", "other", "อื่นๆ", "其他"],
         
@@ -229,10 +231,6 @@ def find_mandatory_attributes(attributes: list, target_country: str = "Japan"):
         # 客製化
         "custom": ["no", "ไม่", "否", "ไม่ใช่"],
         "客製": ["no", "ไม่", "否"],
-        
-        # 保養說明
-        "care": ["see product label", "see label", "ดูฉลากสินค้า", "詳見商品標籤"],
-        "保養": ["see product label", "see label", "ดูฉลากสินค้า", "詳見商品標籤"],
     }
     
     # 產地別名
@@ -247,20 +245,30 @@ def find_mandatory_attributes(attributes: list, target_country: str = "Japan"):
     }
     
     for attr in attributes:
-        # 只處理必填屬性
-        if not attr.get("is_mandatory", False):
-            continue
-        
         attr_id = attr.get("attribute_id")
         attr_name = (attr.get("original_attribute_name", "") + " " + attr.get("display_attribute_name", "")).lower()
         values = attr.get("attribute_value_list", [])
+        
+        # 檢查是否為 mandatory（支援多種字段名稱）
+        is_mandatory = attr.get("is_mandatory", False) or attr.get("mandatory", False) or attr.get("is_required", False)
+        
+        # 檢查是否為重要屬性（即使不是 mandatory 也處理）
+        is_important = any(kw in attr_name for kw in important_attr_keywords)
+        
+        # 只處理 mandatory 或重要屬性
+        if not is_mandatory and not is_important:
+            continue
+        
+        # 跳過沒有選項的屬性
+        if not values:
+            continue
         
         # 嘗試找到合適的預設值
         selected_value_id = 0
         selected_value_name = ""
         
         # 檢查是否為產地屬性
-        is_country_attr = any(kw in attr_name for kw in ["country", "origin", "region", "產地", "ประเทศ"])
+        is_country_attr = any(kw in attr_name for kw in ["country", "origin", "region", "產地", "ประเทศ", "แหล่งกำเนิด"])
         
         if is_country_attr:
             # 產地屬性：使用指定的國家
@@ -296,17 +304,21 @@ def find_mandatory_attributes(attributes: list, target_country: str = "Japan"):
             selected_value_id = first_val.get("value_id", 0)
             selected_value_name = first_val.get("original_value_name", "")
         
-        # 加入必填屬性列表
+        # 加入必填屬性列表（避免重複）
         if selected_value_id or selected_value_name:
-            mandatory_attrs.append({
-                "attribute_id": attr_id,
-                "attribute_value_list": [{
-                    "value_id": selected_value_id,
-                    "original_value_name": selected_value_name
-                }]
-            })
+            # 檢查是否已經加入過
+            existing_ids = [a.get("attribute_id") for a in mandatory_attrs]
+            if attr_id not in existing_ids:
+                mandatory_attrs.append({
+                    "attribute_id": attr_id,
+                    "attribute_value_list": [{
+                        "value_id": selected_value_id,
+                        "original_value_name": selected_value_name
+                    }]
+                })
     
     return mandatory_attrs
+
 
 def upload_image(access_token: str, shop_id: int, image_url: str):
     """上傳圖片到蝦皮 MediaSpace"""

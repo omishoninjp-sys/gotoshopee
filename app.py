@@ -500,12 +500,12 @@ def sync_page():
                 </div>
                 <div id="days-to-ship-container">
                     <label><strong>備貨天數：</strong></label>
-                    <input type="number" id="days-to-ship" value="4" min="1" max="15" style="width: 60px;">
-                    <span>天</span>
+                    <input type="number" id="days-to-ship" value="7" min="4" max="10" style="width: 60px;">
+                    <span>天 (4-10天)</span>
                 </div>
             </div>
             <p style="margin-top: 10px; color: #666;">
-                <small>✅ 較長備貨：代購商品建議開啟，備貨時間可設 1-15 天</small><br>
+                <small>✅ 較長備貨：代購商品建議開啟，泰國蝦皮備貨時間限 4-10 天</small><br>
                 <small>❌ 不勾選：一般商品，需在 1-3 個工作日內出貨</small>
             </p>
             <script>
@@ -933,7 +933,7 @@ def sync_page():
                 
                 // 讀取備貨設定
                 const preOrder = document.getElementById('pre-order').checked;
-                const daysToShip = parseInt(document.getElementById('days-to-ship').value) || 4;
+                const daysToShip = Math.max(4, Math.min(10, parseInt(document.getElementById('days-to-ship').value) || 7));
                 
                 // 讀取產地設定
                 const regionOfOrigin = document.getElementById('region-of-origin').value;
@@ -1292,7 +1292,9 @@ def api_sync_collection():
     markup_rate = data.get("markup_rate", 1.05)  # 加成比例
     min_price = data.get("min_price", 0)  # 最低價格限制
     pre_order = data.get("pre_order", True)  # 是否較長備貨
-    days_to_ship = data.get("days_to_ship", 4)  # 備貨天數
+    days_to_ship = data.get("days_to_ship", 7)  # 備貨天數
+    # 確保備貨天數在 4-10 之間（蝦皮泰國限制）
+    days_to_ship = max(4, min(10, days_to_ship))
     region_of_origin = data.get("region_of_origin", "Japan")  # 產地
     limit = data.get("limit", 1)
     offset = data.get("offset", 0)  # 分頁偏移量
@@ -1327,7 +1329,8 @@ def api_sync_collection():
         attrs_result = get_attributes(
             get_current_token()["access_token"],
             get_current_token()["shop_id"],
-            category_id
+            category_id,
+            language="en"  # 使用英文確保能正確識別屬性名稱
         )
         
         country_origin_attr = None
@@ -1335,6 +1338,10 @@ def api_sync_collection():
         if attrs_result.get("success"):
             attributes = attrs_result.get("attributes", [])
             debug_info["attributes_count"] = len(attributes)
+            
+            # 記錄所有屬性名稱（用於除錯）
+            attr_names = [f"{a.get('original_attribute_name')} (mandatory={a.get('is_mandatory', 'N/A')})" for a in attributes[:10]]
+            debug_info["attribute_names"] = attr_names
             
             # 找到產地屬性
             country_origin_attr = find_country_of_origin_attribute(attributes, region_of_origin)
@@ -1350,6 +1357,8 @@ def api_sync_collection():
             if mandatory_attrs:
                 debug_info["steps"].append(f"  ✅ 找到 {len(mandatory_attrs)} 個必填屬性並設定預設值")
                 debug_info["mandatory_attrs_count"] = len(mandatory_attrs)
+                # 記錄必填屬性 ID
+                debug_info["mandatory_attr_ids"] = [a.get("attribute_id") for a in mandatory_attrs]
             else:
                 debug_info["steps"].append("  ⚠️ 未找到必填屬性")
         else:
