@@ -1483,29 +1483,30 @@ def api_sync_collection():
                 
                 debug_info["steps"].append(f"  成功上傳 {len(image_ids)} 張圖片")
                 
-                # 2d-2. 檢測是否為衣服類商品，上傳尺碼表到專用欄位
-                size_chart_id = ""
+                # 2d-2. 檢測是否為衣服類商品，自動加上尺碼表
                 product_tags = product.get("tags", "").split(",") if product.get("tags") else []
                 product_tags = [t.strip() for t in product_tags]
                 
                 if SIZE_CHART_URL and is_clothing_product(product.get("title", ""), collection_title, product_tags):
                     debug_info["steps"].append("  📏 檢測到衣服類商品，上傳尺碼表...")
                     
-                    # 上傳尺碼表到蝦皮專用欄位
-                    size_chart_result = upload_size_chart(
-                        get_current_token()["access_token"],
-                        get_current_token()["shop_id"],
-                        SIZE_CHART_URL
-                    )
-                    
-                    if size_chart_result.get("success"):
-                        size_chart_id = size_chart_result.get("size_chart_id", "")
-                        if size_chart_id:
-                            debug_info["steps"].append(f"    ✅ 尺碼表上傳成功 (ID: {size_chart_id})")
+                    # 檢查是否還有圖片空間（蝦皮最多 9 張）
+                    if len(image_ids) < 9:
+                        size_chart_result = upload_image(
+                            get_current_token()["access_token"],
+                            get_current_token()["shop_id"],
+                            SIZE_CHART_URL
+                        )
+                        
+                        if size_chart_result.get("success"):
+                            size_chart_id = size_chart_result.get("image_id")
+                            if size_chart_id:
+                                image_ids.append(size_chart_id)
+                                debug_info["steps"].append(f"    ✅ 尺碼表上傳成功 (ID: {size_chart_id})")
                         else:
-                            debug_info["steps"].append("    ⚠️ 尺碼表上傳成功但未取得 ID")
+                            debug_info["steps"].append(f"    ⚠️ 尺碼表上傳失敗: {size_chart_result.get('error')}")
                     else:
-                        debug_info["steps"].append(f"    ⚠️ 尺碼表上傳失敗: {size_chart_result.get('error')}")
+                        debug_info["steps"].append("    ⚠️ 圖片已達上限(9張)，跳過尺碼表")
                 
                 # 2c. 轉換商品格式
                 debug_info["steps"].append("  轉換商品格式...")
