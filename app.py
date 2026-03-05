@@ -978,9 +978,14 @@ def sync_page():
                         const currentBatchSize = Math.min(batchSize, limit - offset);
                         
                         try {
+                            // 添加 5 分鐘超時
+                            const controller = new AbortController();
+                            const timeoutId = setTimeout(() => controller.abort(), 300000);  // 5分鐘
+                            
                             const res = await fetch('/api/sync/collection', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
+                                signal: controller.signal,
                                 body: JSON.stringify({
                                     collection_id: col.id,
                                     collection_title: col.title,
@@ -996,6 +1001,8 @@ def sync_page():
                                     offset: offset
                                 })
                             });
+                            
+                            clearTimeout(timeoutId);
                             
                             const data = await res.json();
                             debug(data);
@@ -1516,14 +1523,21 @@ def api_sync_collection():
                 image_ids = []
                 image_upload_results = []
                 
-                for i, img_url in enumerate(image_urls[:9]):  # 蝦皮最多 9 張
-                    debug_info["steps"].append(f"  上傳圖片 {i+1}/{min(len(image_urls), 9)}...")
+                # 測試模式：限制圖片數量以加快速度
+                max_images = 3 if limit == 1 else 9  # 測試模式只上傳3張
+                images_to_upload = image_urls[:max_images]
+                
+                for i, img_url in enumerate(images_to_upload):
+                    debug_info["steps"].append(f"  上傳圖片 {i+1}/{len(images_to_upload)}...")
                     
-                    upload_result = upload_image(
-                        get_current_token()["access_token"],
-                        get_current_token()["shop_id"],
-                        img_url
-                    )
+                    try:
+                        upload_result = upload_image(
+                            get_current_token()["access_token"],
+                            get_current_token()["shop_id"],
+                            img_url
+                        )
+                    except Exception as e:
+                        upload_result = {"success": False, "error": f"上傳異常: {str(e)}"}
                     
                     image_upload_results.append({
                         "index": i,
