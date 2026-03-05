@@ -302,3 +302,55 @@ def get_translation(lang, key):
     if lang not in TRANSLATIONS:
         lang = "en"  # 預設英文
     return TRANSLATIONS.get(lang, {}).get(key, TRANSLATIONS["en"].get(key, key))
+
+# ==================== 尺碼表設定 ====================
+
+# 尺碼表圖片 URL（請上傳到圖床後設定）
+# 可以使用 Imgur、GitHub 或其他圖床
+SIZE_CHART_URL = os.environ.get("SIZE_CHART_URL", "")
+
+# 衣服相關關鍵字（用於判斷是否為衣服類商品）
+# 標題或系列名稱包含這些關鍵字時，會自動加上尺碼表
+CLOTHING_KEYWORDS = [
+    # 英文
+    "shirt", "t-shirt", "tee", "top", "blouse", "hoodie", "sweater", "jacket", 
+    "coat", "pants", "trousers", "jeans", "shorts", "skirt", "dress", "vest",
+    "cardigan", "pullover", "sweatshirt", "polo", "tank", "cap", "hat", "beanie",
+    "shoes", "sneakers", "boots", "sandals", "slippers",
+    # 日文
+    "シャツ", "Tシャツ", "パーカー", "ジャケット", "コート", "パンツ", "ズボン",
+    "スカート", "ワンピース", "セーター", "カーディガン", "ベスト", "帽子", "キャップ",
+    "靴", "スニーカー", "ブーツ",
+    # 中文
+    "上衣", "T恤", "襯衫", "外套", "夾克", "褲子", "長褲", "短褲", "裙子", "洋裝",
+    "毛衣", "針織", "帽子", "鞋", "運動鞋", "靴子", "衛衣", "連帽",
+    # 品牌關鍵字（通常是服飾品牌）
+    "BAPE", "Human Made", "NEIGHBORHOOD", "Supreme", "Stussy", "UNIQLO",
+    "adidas", "Nike", "Onitsuka Tiger", "New Balance"
+]
+
+def is_clothing_product(title: str, collection_title: str = "", tags: list = None) -> bool:
+    """
+    判斷商品是否為衣服相關
+    
+    Args:
+        title: 商品標題
+        collection_title: 系列名稱
+        tags: 商品標籤列表
+    
+    Returns:
+        True 如果是衣服相關商品
+    """
+    # 合併檢查的文字
+    check_text = (title + " " + collection_title).lower()
+    
+    # 加入標籤
+    if tags:
+        check_text += " " + " ".join(tags).lower()
+    
+    # 檢查是否包含衣服關鍵字
+    for keyword in CLOTHING_KEYWORDS:
+        if keyword.lower() in check_text:
+            return True
+    
+    return False
