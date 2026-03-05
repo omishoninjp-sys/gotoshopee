@@ -589,10 +589,40 @@ def sync_page():
         <!-- Debug 資訊 -->
         <div class="section">
             <h3>🔧 Debug 資訊 <button class="collapse-btn" onclick="toggleDebug()">[顯示/隱藏]</button></h3>
+            <div style="margin-bottom: 10px;">
+                <button class="btn btn-secondary" onclick="testAttributeTree()">測試分類屬性</button>
+                <span id="attr-test-status" style="margin-left: 10px;"></span>
+            </div>
             <div id="debug-info" class="log-box" style="display:none; background: #f8f9fa; color: #333;"></div>
         </div>
 
         <script>
+            // 測試分類屬性
+            async function testAttributeTree() {
+                if (!selectedCategoryId) {
+                    alert('請先選擇分類');
+                    return;
+                }
+                
+                document.getElementById('attr-test-status').textContent = '測試中...';
+                
+                try {
+                    const res = await fetch('/api/shopee/attribute-tree/' + selectedCategoryId);
+                    const data = await res.json();
+                    
+                    document.getElementById('debug-info').style.display = 'block';
+                    document.getElementById('debug-info').textContent = JSON.stringify(data, null, 2);
+                    
+                    if (data.success) {
+                        document.getElementById('attr-test-status').textContent = '✅ 成功！找到 ' + (data.attributes_count || 0) + ' 個屬性';
+                    } else {
+                        document.getElementById('attr-test-status').textContent = '❌ 失敗: ' + (data.error || '未知錯誤');
+                    }
+                } catch (e) {
+                    document.getElementById('attr-test-status').textContent = '❌ 請求失敗: ' + e.message;
+                }
+            }
+            
             // 全域變數
             let allCategories = [];
             let allLogistics = [];
