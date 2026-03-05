@@ -5,7 +5,7 @@ import time
 import requests
 from flask import Flask, redirect, request, jsonify
 
-from config import PARTNER_ID, PARTNER_KEY, HOST, REDIRECT_URL, SHOPEE_REGIONS, TRANSLATIONS, get_translation
+from config import PARTNER_ID, PARTNER_KEY, HOST, REDIRECT_URL, SHOPEE_REGIONS
 from shopee_auth import build_auth_url, build_api_url, get_timestamp, generate_sign
 
 app = Flask(__name__)
@@ -25,12 +25,6 @@ def set_current_token(data):
     """設定當前站點的 token"""
     token_storage[current_region] = data
 
-def t(key):
-    """取得當前站點語言的翻譯"""
-    region_info = SHOPEE_REGIONS.get(current_region, {})
-    lang = region_info.get("lang", "en")
-    return get_translation(lang, key)
-
 
 @app.route("/")
 def index():
@@ -46,16 +40,16 @@ def index():
     
     if current_token.get("access_token"):
         status_class = "connected"
-        status_text = t("connected") + f" (Shop ID: {current_token.get('shop_id')})"
-        action_html = f"""
-        <a class="btn" href="/sync">🔄 {t("sync_test")}</a>
-        <a class="btn" href="/shop-info">{t("shop_info")}</a>
-        <a class="btn" href="/auth">{t("reauthorize")}</a>
+        status_text = f"已連接商店 (Shop ID: {current_token.get('shop_id')})"
+        action_html = """
+        <a class="btn" href="/sync">🔄 商品同步測試</a>
+        <a class="btn" href="/shop-info">查看商店資訊</a>
+        <a class="btn" href="/auth">重新授權</a>
         """
     else:
         status_class = "disconnected"
-        status_text = t("not_authorized")
-        action_html = f'<a class="btn" href="/auth">{t("connect_shop")}</a>'
+        status_text = "尚未授權"
+        action_html = '<a class="btn" href="/auth">連接蝦皮商店</a>'
     
     # 建立站點選擇按鈕
     region_buttons = ""
@@ -70,23 +64,29 @@ def index():
         if has_token:
             btn_class += " connected"
         
-        region_buttons += f'<a href="/?region={code}" class="{btn_class}">{info["flag"]} {info["name"]}</a>'
+        # 使用中文名稱
+        display_name = info.get("name_zh", info.get("name", ""))
+        region_buttons += f'<a href="/?region={code}" class="{btn_class}">{info["flag"]} {display_name}</a>'
     
     # 顯示已授權的商店列表
     shop_list = ""
     for code, token in token_storage.items():
         if token.get("access_token"):
             info = SHOPEE_REGIONS.get(code, {})
-            shop_list += f'<div class="shop-item">{info.get("flag", "")} {info.get("name", "")}: Shop ID {token.get("shop_id")}</div>'
+            display_name = info.get("name_zh", info.get("name", ""))
+            shop_list += f'<div class="shop-item">{info.get("flag", "")} {display_name}: Shop ID {token.get("shop_id")}</div>'
     
     if not shop_list:
-        shop_list = f'<div class="shop-item">{t("no_shops")}</div>'
+        shop_list = '<div class="shop-item">尚無已授權商店</div>'
+    
+    # 當前站點顯示名稱
+    current_display_name = region_info.get("name_zh", region_info.get("name", ""))
     
     html = f"""
     <!DOCTYPE html>
     <html>
     <head>
-        <title>{t("title")}</title>
+        <title>Goyoutati Shopee Sync</title>
         <style>
             body {{ font-family: Arial, sans-serif; max-width: 900px; margin: 50px auto; padding: 20px; }}
             .btn {{ display: inline-block; padding: 10px 20px; background: #ee4d2d; color: white; 
@@ -113,22 +113,22 @@ def index():
         </style>
     </head>
     <body>
-        <h1>🛒 {t("title")}</h1>
-        <p>{t("subtitle")}</p>
+        <h1>🛒 Goyoutati Shopee Sync</h1>
+        <p>Shopify 商品同步到蝦皮（多站點支援）</p>
         
         <div class="region-selector">
-            <h3>🌏 {t("select_region")}</h3>
+            <h3>🌏 選擇站點</h3>
             {region_buttons}
         </div>
         
         <div class="status {status_class}">
-            <strong>{t("status")}：</strong> {region_info.get('flag', '')} {region_info.get('name', '')} - {status_text}
+            <strong>狀態：</strong> {region_info.get('flag', '')} {current_display_name} - {status_text}
         </div>
         
         {action_html}
         
         <div class="shop-list">
-            <h3>📋 {t("authorized_shops")}</h3>
+            <h3>📋 已授權商店</h3>
             {shop_list}
         </div>
         
@@ -328,7 +328,7 @@ def sync_page():
     
     region_info = SHOPEE_REGIONS.get(current_region, {})
     region_flag = region_info.get('flag', '')
-    region_name = region_info.get('name', '')
+    region_name = region_info.get('name_zh', region_info.get('name', ''))  # 優先使用中文名稱
     shop_id = current_token.get('shop_id', '')
     
     html = """
@@ -1209,20 +1209,6 @@ def api_shopify_products(collection_id):
         })
     else:
         return jsonify(result)
-
-
-@app.route("/api/translations")
-def api_translations():
-    """獲取當前站點的翻譯"""
-    region_info = SHOPEE_REGIONS.get(current_region, {})
-    lang = region_info.get("lang", "en")
-    translations = TRANSLATIONS.get(lang, TRANSLATIONS.get("en", {}))
-    return jsonify({
-        "success": True,
-        "region": current_region,
-        "lang": lang,
-        "translations": translations
-    })
 
 
 @app.route("/api/shopee/categories")
