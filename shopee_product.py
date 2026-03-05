@@ -595,7 +595,7 @@ def create_product(access_token: str, shop_id: int, product_data: dict):
             "debug": debug_info
         }
 
-def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids: list, collection_title: str = "", country_origin_attr: dict = None, exchange_rate: float = 0.21, markup_rate: float = 1.05, pre_order: bool = True, days_to_ship: int = 4, target_lang: str = "zh-TW", size_chart_id: str = "", mandatory_attrs: list = None):
+def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids: list, collection_title: str = "", country_origin_attr: dict = None, exchange_rate: float = 0.21, markup_rate: float = 1.05, pre_order: bool = True, days_to_ship: int = 4, target_lang: str = "zh-TW", size_chart_id: str = "", mandatory_attrs: list = None, brand_name_override: str = None, region_of_origin: str = "Japan"):
     """
     將 Shopify 商品轉換為蝦皮商品格式
     
@@ -612,6 +612,8 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
         target_lang: 目標語言代碼，預設 "zh-TW"（繁體中文）
         size_chart_id: 尺碼表圖片 ID（從 upload_size_chart 取得）
         mandatory_attrs: 必填屬性列表（來自 find_mandatory_attributes）
+        brand_name_override: 覆蓋的品牌名稱（優先於 Shopify vendor）
+        region_of_origin: 產地名稱，預設 "Japan"
     """
     # 取得價格和選項資訊
     variants = shopify_product.get("variants", [])
@@ -693,8 +695,14 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
     description = description_prefix + description
     description = description[:3000]  # 蝦皮描述上限
     
-    # 從 Shopify vendor 取得品牌名稱，沒有的話用「無品牌」
-    brand_name = shopify_product.get("vendor", "")
+    # 決定品牌名稱
+    # 優先順序：override > Shopify vendor > No Brand
+    if brand_name_override and brand_name_override != "No Brand" and brand_name_override != "use_shopify":
+        brand_name = brand_name_override
+    elif brand_name_override == "use_shopify":
+        brand_name = shopify_product.get("vendor", "") or "No Brand"
+    else:
+        brand_name = "No Brand"
     
     # 建立蝦皮商品資料
     shopee_product = {
@@ -941,6 +949,60 @@ def get_logistics(access_token: str, shop_id: int):
             "success": False,
             "error": str(e),
             "logistics": [],
+            "debug": debug_info
+        }
+
+
+def get_item_base_info(access_token: str, shop_id: int, item_id: int):
+    """獲取已上架商品的詳細資訊"""
+    debug_info = {"step": "get_item_base_info", "item_id": item_id}
+    
+    try:
+        path = "/api/v2/product/get_item_base_info"
+        timestamp = get_timestamp()
+        sign = generate_shop_sign(path, timestamp, access_token, shop_id)
+        
+        url = f"{HOST}{path}?partner_id={PARTNER_ID}&timestamp={timestamp}&access_token={access_token}&shop_id={shop_id}&sign={sign}&item_id_list={item_id}"
+        debug_info["url"] = url
+        
+        response = requests.get(url, timeout=30)
+        debug_info["status_code"] = response.status_code
+        
+        data = response.json()
+        debug_info["error"] = data.get("error", "")
+        
+        if data.get("error") == "":
+            item_list = data.get("response", {}).get("item_list", [])
+            if item_list:
+                item = item_list[0]
+                # 提取屬性資訊
+                attributes = item.get("attribute_list", [])
+                return {
+                    "success": True,
+                    "item_id": item_id,
+                    "item_name": item.get("item_name"),
+                    "category_id": item.get("category_id"),
+                    "attributes": attributes,
+                    "brand": item.get("brand", {}),
+                    "debug": debug_info
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": "商品不存在",
+                    "debug": debug_info
+                }
+        else:
+            return {
+                "success": False,
+                "error": data.get("message", data.get("error")),
+                "debug": debug_info
+            }
+    except Exception as e:
+        debug_info["exception"] = str(e)
+        return {
+            "success": False,
+            "error": str(e),
             "debug": debug_info
         }
 

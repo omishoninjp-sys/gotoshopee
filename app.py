@@ -544,6 +544,37 @@ def sync_page():
             </p>
         </div>
         
+        <!-- Step 4.8: 品牌設定 -->
+        <div class="section">
+            <h3><span class="step-indicator">🏷️</span>品牌設定 (Brand)</h3>
+            <div style="display: flex; gap: 20px; align-items: center; flex-wrap: wrap;">
+                <div>
+                    <label><strong>品牌選擇：</strong></label>
+                    <select id="brand-select" style="padding: 8px 15px; font-size: 14px; border-radius: 5px; border: 1px solid #ddd; min-width: 200px;" onchange="toggleCustomBrand()">
+                        <option value="No Brand" selected>No Brand (無品牌)</option>
+                        <option value="use_shopify">使用 Shopify Vendor</option>
+                        <option value="custom">自訂品牌名稱</option>
+                    </select>
+                </div>
+                <div id="custom-brand-container" style="display: none;">
+                    <label><strong>品牌名稱：</strong></label>
+                    <input type="text" id="custom-brand-name" placeholder="輸入品牌名稱" style="padding: 8px 15px; font-size: 14px; border-radius: 5px; border: 1px solid #ddd; min-width: 200px;">
+                </div>
+            </div>
+            <p style="margin-top: 10px; color: #666;">
+                <small>🏷️ No Brand：無品牌商品</small><br>
+                <small>🏷️ 使用 Shopify Vendor：自動取用 Shopify 商品的 Vendor 欄位</small><br>
+                <small>🏷️ 自訂品牌名稱：手動輸入品牌名稱（如 Human Made, BAPE 等）</small>
+            </p>
+            <script>
+                function toggleCustomBrand() {
+                    const select = document.getElementById('brand-select').value;
+                    const container = document.getElementById('custom-brand-container');
+                    container.style.display = select === 'custom' ? 'block' : 'none';
+                }
+            </script>
+        </div>
+        
         <!-- Step 5: 執行同步 -->
         <div class="section">
             <h3><span class="step-indicator">5</span>執行同步</h3>
@@ -591,12 +622,41 @@ def sync_page():
             <h3>🔧 Debug 資訊 <button class="collapse-btn" onclick="toggleDebug()">[顯示/隱藏]</button></h3>
             <div style="margin-bottom: 10px;">
                 <button class="btn btn-secondary" onclick="testAttributeTree()">測試分類屬性</button>
+                <input type="text" id="item-id-input" placeholder="蝦皮商品 ID" style="width: 150px; margin-left: 10px; padding: 5px;">
+                <button class="btn btn-secondary" onclick="queryItemAttributes()">查詢商品屬性</button>
                 <span id="attr-test-status" style="margin-left: 10px;"></span>
             </div>
             <div id="debug-info" class="log-box" style="display:none; background: #f8f9fa; color: #333;"></div>
         </div>
 
         <script>
+            // 查詢已上架商品的屬性
+            async function queryItemAttributes() {
+                const itemId = document.getElementById('item-id-input').value.trim();
+                if (!itemId) {
+                    alert('請輸入蝦皮商品 ID');
+                    return;
+                }
+                
+                document.getElementById('attr-test-status').textContent = '查詢中...';
+                
+                try {
+                    const res = await fetch('/api/shopee/item/' + itemId);
+                    const data = await res.json();
+                    
+                    document.getElementById('debug-info').style.display = 'block';
+                    document.getElementById('debug-info').textContent = JSON.stringify(data, null, 2);
+                    
+                    if (data.success) {
+                        document.getElementById('attr-test-status').textContent = '✅ 成功！找到 ' + (data.attributes?.length || 0) + ' 個屬性';
+                    } else {
+                        document.getElementById('attr-test-status').textContent = '❌ 失敗: ' + (data.error || '未知錯誤');
+                    }
+                } catch (e) {
+                    document.getElementById('attr-test-status').textContent = '❌ 請求失敗: ' + e.message;
+                }
+            }
+            
             // 測試分類屬性
             async function testAttributeTree() {
                 if (!selectedCategoryId) {
@@ -968,6 +1028,17 @@ def sync_page():
                 // 讀取產地設定
                 const regionOfOrigin = document.getElementById('region-of-origin').value;
                 
+                // 讀取品牌設定
+                const brandSelect = document.getElementById('brand-select').value;
+                let brandName = 'No Brand';
+                if (brandSelect === 'custom') {
+                    brandName = document.getElementById('custom-brand-name').value.trim() || 'No Brand';
+                } else if (brandSelect === 'use_shopify') {
+                    brandName = 'use_shopify';  // 後端會讀取 Shopify vendor
+                } else {
+                    brandName = 'No Brand';
+                }
+                
                 const testBtn = document.getElementById('test-btn');
                 const syncBtn = document.getElementById('sync-btn');
                 testBtn.disabled = true;
@@ -984,6 +1055,7 @@ def sync_page():
                 log('匯率: ' + exchangeRate + ' | 加成: ' + markupRate + ' | 最低價格: NT$' + minPrice, 'dim');
                 log('較長備貨: ' + (preOrder ? '是 (' + daysToShip + '天)' : '否'), 'dim');
                 log('產地: ' + regionOfOrigin, 'dim');
+                log('品牌: ' + (brandName === 'use_shopify' ? '使用 Shopify Vendor' : brandName), 'dim');
                 log('系列數量: ' + collections.length, 'dim');
                 log('', 'info');
                 
@@ -1027,6 +1099,7 @@ def sync_page():
                                     pre_order: preOrder,
                                     days_to_ship: daysToShip,
                                     region_of_origin: regionOfOrigin,
+                                    brand_name: brandName,
                                     limit: currentBatchSize,
                                     offset: offset
                                 })
@@ -1329,6 +1402,23 @@ def api_shopee_attribute_tree(category_id):
     return jsonify(result)
 
 
+@app.route("/api/shopee/item/<int:item_id>")
+def api_shopee_item(item_id):
+    """獲取已上架商品的詳細資訊（用於獲取屬性結構）"""
+    if not get_current_token().get("access_token"):
+        return jsonify({"success": False, "error": "Not authorized"})
+    
+    from shopee_product import get_item_base_info
+    
+    result = get_item_base_info(
+        get_current_token()["access_token"],
+        get_current_token()["shop_id"],
+        item_id
+    )
+    
+    return jsonify(result)
+
+
 @app.route("/api/shopee/attributes/<int:category_id>")
 def api_shopee_attributes(category_id):
     """獲取分類屬性（用於除錯）"""
@@ -1398,6 +1488,7 @@ def api_sync_collection():
     # 確保備貨天數在 4-10 之間（蝦皮泰國限制）
     days_to_ship = max(4, min(10, days_to_ship))
     region_of_origin = data.get("region_of_origin", "Japan")  # 產地
+    brand_name = data.get("brand_name", "No Brand")  # 品牌名稱
     limit = data.get("limit", 1)
     offset = data.get("offset", 0)  # 分頁偏移量
     
@@ -1416,6 +1507,7 @@ def api_sync_collection():
         "pre_order": pre_order,
         "days_to_ship": days_to_ship,
         "region_of_origin": region_of_origin,
+        "brand_name": brand_name,
         "target_lang": target_lang,
         "limit": limit,
         "offset": offset,
@@ -1654,7 +1746,9 @@ def api_sync_collection():
                     days_to_ship,  # 備貨天數
                     target_lang,  # 目標語言
                     "",  # 尺碼表 ID（已移到圖片列表中）
-                    mandatory_attrs  # 必填屬性列表
+                    mandatory_attrs,  # 必填屬性列表
+                    brand_name,  # 品牌名稱（來自介面設定）
+                    region_of_origin  # 產地（來自介面設定）
                 )
                 
                 # 更新物流設定
