@@ -119,6 +119,67 @@ def get_attributes(access_token: str, shop_id: int, category_id: int, language: 
         }
 
 
+def get_attribute_tree(access_token: str, shop_id: int, category_id: int, language: str = "en"):
+    """取得分類的屬性樹（使用 get_attribute_tree API）"""
+    debug_info = {"step": "get_attribute_tree", "category_id": category_id}
+    
+    try:
+        path = "/api/v2/product/get_attribute_tree"
+        timestamp = get_timestamp()
+        sign = generate_shop_sign(path, timestamp, access_token, shop_id)
+        
+        # 這個 API 需要 POST 請求
+        url = f"{HOST}{path}?partner_id={PARTNER_ID}&timestamp={timestamp}&access_token={access_token}&shop_id={shop_id}&sign={sign}"
+        debug_info["url"] = url
+        
+        # POST body
+        body = {
+            "category_id_list": [category_id],
+            "language": language
+        }
+        debug_info["body"] = body
+        
+        response = requests.post(url, json=body, timeout=30)
+        debug_info["status_code"] = response.status_code
+        
+        data = response.json()
+        debug_info["error"] = data.get("error", "")
+        debug_info["message"] = data.get("message", "")
+        
+        if data.get("error") == "":
+            # 返回完整結構
+            attribute_tree = data.get("response", {}).get("attribute_tree", [])
+            debug_info["tree_count"] = len(attribute_tree)
+            
+            # 解析第一個分類的屬性
+            attributes = []
+            if attribute_tree:
+                first_category = attribute_tree[0]
+                attributes = first_category.get("attribute_list", [])
+            
+            return {
+                "success": True,
+                "category_id": category_id,
+                "attribute_tree": attribute_tree,
+                "attributes": attributes,
+                "attributes_count": len(attributes),
+                "debug": debug_info
+            }
+        else:
+            return {
+                "success": False,
+                "error": data.get("message", data.get("error")),
+                "debug": debug_info
+            }
+    except Exception as e:
+        debug_info["exception"] = str(e)
+        return {
+            "success": False,
+            "error": str(e),
+            "debug": debug_info
+        }
+
+
 def find_country_of_origin_attribute(attributes: list, target_country: str = "Japan"):
     """
     從屬性列表中找到產地屬性

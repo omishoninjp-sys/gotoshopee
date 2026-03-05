@@ -1281,6 +1281,24 @@ def api_shopee_logistics():
     return jsonify(result)
 
 
+@app.route("/api/shopee/attribute-tree/<int:category_id>")
+def api_shopee_attribute_tree(category_id):
+    """獲取分類屬性樹（用於除錯）- 使用 get_attribute_tree API"""
+    if not get_current_token().get("access_token"):
+        return jsonify({"success": False, "error": "Not authorized"})
+    
+    from shopee_product import get_attribute_tree
+    
+    result = get_attribute_tree(
+        get_current_token()["access_token"],
+        get_current_token()["shop_id"],
+        category_id,
+        language="en"
+    )
+    
+    return jsonify(result)
+
+
 @app.route("/api/shopee/attributes/<int:category_id>")
 def api_shopee_attributes(category_id):
     """獲取分類屬性（用於除錯）"""
