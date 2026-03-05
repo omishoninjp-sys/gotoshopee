@@ -595,6 +595,74 @@ def create_product(access_token: str, shop_id: int, product_data: dict):
             "debug": debug_info
         }
 
+
+def init_tier_variation(access_token: str, shop_id: int, item_id: int, tier_variation: list, model_list: list):
+    """
+    初始化商品的多規格
+    
+    蝦皮 API v2 要求先創建商品，再用這個 API 添加多規格
+    
+    Args:
+        access_token: 存取令牌
+        shop_id: 商店 ID
+        item_id: 商品 ID（從 create_product 返回）
+        tier_variation: 規格層級列表，例如:
+            [
+                {"name": "顏色", "option_list": [{"option": "紅色"}, {"option": "藍色"}]},
+                {"name": "尺寸", "option_list": [{"option": "S"}, {"option": "M"}]}
+            ]
+        model_list: 規格組合列表，例如:
+            [
+                {"tier_index": [0, 0], "original_price": 100, "model_sku": "RED-S", "normal_stock": 10},
+                {"tier_index": [0, 1], "original_price": 100, "model_sku": "RED-M", "normal_stock": 10},
+                ...
+            ]
+    """
+    debug_info = {"step": "init_tier_variation", "item_id": item_id}
+    
+    try:
+        path = "/api/v2/product/init_tier_variation"
+        timestamp = get_timestamp()
+        sign = generate_shop_sign(path, timestamp, access_token, shop_id)
+        
+        url = f"{HOST}{path}?partner_id={PARTNER_ID}&timestamp={timestamp}&access_token={access_token}&shop_id={shop_id}&sign={sign}"
+        
+        # 構建請求 body
+        body = {
+            "item_id": item_id,
+            "tier_variation": tier_variation,
+            "model": model_list
+        }
+        
+        debug_info["url"] = url
+        debug_info["request_body"] = body
+        
+        response = requests.post(url, json=body, timeout=60)
+        debug_info["status_code"] = response.status_code
+        
+        data = response.json()
+        debug_info["response"] = data
+        
+        if data.get("error") == "":
+            return {
+                "success": True,
+                "model_list": data.get("response", {}).get("model_list", []),
+                "debug": debug_info
+            }
+        else:
+            return {
+                "success": False,
+                "error": data.get("message", data.get("error")),
+                "debug": debug_info
+            }
+    except Exception as e:
+        debug_info["exception"] = str(e)
+        return {
+            "success": False,
+            "error": str(e),
+            "debug": debug_info
+        }
+
 def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids: list, collection_title: str = "", country_origin_attr: dict = None, exchange_rate: float = 0.21, markup_rate: float = 1.05, pre_order: bool = True, days_to_ship: int = 4, target_lang: str = "zh-TW", size_chart_id: str = "", mandatory_attrs: list = None, brand_name_override: str = None, region_of_origin: str = "Japan"):
     """
     將 Shopify 商品轉換為蝦皮商品格式
@@ -809,7 +877,8 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
                 model_list.append({
                     "tier_index": tier_index,
                     "original_price": variant_price,
-                    "stock": variant_stock
+                    "normal_stock": variant_stock,
+                    "seller_stock": [{"stock": variant_stock}]
                 })
         
         # 加入規格設定到商品資料
@@ -817,7 +886,7 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
             shopee_product["tier_variation"] = tier_variation
             shopee_product["model"] = model_list
             # 多規格商品：normal_stock 設為 0，seller_stock 保留但設為總庫存
-            total_stock = sum(m.get("stock", 0) for m in model_list)
+            total_stock = sum(m.get("normal_stock", 0) for m in model_list)
             shopee_product["normal_stock"] = 0
             shopee_product["seller_stock"] = [{"stock": total_stock}]
     

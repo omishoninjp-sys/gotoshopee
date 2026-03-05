@@ -1473,7 +1473,7 @@ def api_sync_collection():
         return jsonify({"success": False, "error": "Not authorized"})
     
     from shopify_api import ShopifyAPI
-    from shopee_product import upload_image, create_product, shopify_to_shopee_product, get_attributes, find_country_of_origin_attribute, find_mandatory_attributes
+    from shopee_product import upload_image, create_product, shopify_to_shopee_product, get_attributes, find_country_of_origin_attribute, find_mandatory_attributes, init_tier_variation
     
     data = request.json
     collection_id = data.get("collection_id")
@@ -1774,6 +1774,15 @@ def api_sync_collection():
                 # 2d. 創建蝦皮商品
                 debug_info["steps"].append("  創建蝦皮商品...")
                 
+                # 提取多規格資料（需要在創建商品後單獨處理）
+                tier_variation_data = shopee_product_data.pop("tier_variation", None)
+                model_data = shopee_product_data.pop("model", None)
+                
+                # 如果是多規格商品，設定基本庫存為 0（庫存由規格決定）
+                if tier_variation_data and model_data:
+                    shopee_product_data["normal_stock"] = 0
+                    shopee_product_data["seller_stock"] = [{"stock": 0}]
+                
                 create_result = create_product(
                     get_current_token()["access_token"],
                     get_current_token()["shop_id"],
@@ -1787,9 +1796,38 @@ def api_sync_collection():
                 }
                 
                 if create_result.get("success"):
-                    product_result["success"] = True
-                    product_result["shopee_item_id"] = create_result.get("item_id")
-                    debug_info["steps"].append(f"  ✅ 創建成功！Item ID: {create_result.get('item_id')}")
+                    item_id = create_result.get("item_id")
+                    product_result["shopee_item_id"] = item_id
+                    debug_info["steps"].append(f"  ✅ 創建成功！Item ID: {item_id}")
+                    
+                    # 如果有多規格，調用 init_tier_variation
+                    if tier_variation_data and model_data:
+                        debug_info["steps"].append(f"  🎨 初始化多規格（{len(model_data)} 個組合）...")
+                        
+                        tier_result = init_tier_variation(
+                            get_current_token()["access_token"],
+                            get_current_token()["shop_id"],
+                            item_id,
+                            tier_variation_data,
+                            model_data
+                        )
+                        
+                        product_debug["tier_variation_result"] = {
+                            "success": tier_result.get("success"),
+                            "error": tier_result.get("error")
+                        }
+                        
+                        if tier_result.get("success"):
+                            debug_info["steps"].append(f"    ✅ 多規格初始化成功！")
+                            product_result["success"] = True
+                        else:
+                            # 多規格初始化失敗，但商品已創建
+                            debug_info["steps"].append(f"    ⚠️ 多規格初始化失敗: {tier_result.get('error')}")
+                            debug_info["steps"].append(f"    ⚠️ 商品已創建但沒有規格，請手動添加")
+                            product_result["success"] = True  # 商品本身創建成功
+                            product_result["warning"] = f"多規格初始化失敗: {tier_result.get('error')}"
+                    else:
+                        product_result["success"] = True
                 else:
                     error_msg = create_result.get("error", "")
                     
