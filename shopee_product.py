@@ -732,7 +732,7 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
         stock = 10  # 沒有 variant，設為預設值 10
     
     # 引入翻譯模組
-    from translator import translate_product, get_title_prefix, get_desc_prefix
+    from translator import translate_product, get_title_suffix, get_desc_prefix
     
     # 取得原始標題和描述
     original_title = shopify_product.get("title", "商品")
@@ -752,12 +752,12 @@ def shopify_to_shopee_product(shopify_product: dict, category_id: int, image_ids
         original_title = translated_title
         description = translated_desc
     
-    # 取得對應語言的前綴
-    title_prefix = get_title_prefix(target_lang)
+    # 取得對應語言的後綴（SEO 優化：品牌在前，GOYOUTATI 在後）
+    title_suffix = get_title_suffix(target_lang)
     description_prefix = get_desc_prefix(target_lang)
     
-    # 加上前綴
-    item_name = title_prefix + original_title
+    # 標題格式：翻譯後的標題 + 後綴
+    item_name = original_title + title_suffix
     item_name = item_name[:120]  # 蝦皮標題上限 120 字
     
     description = description_prefix + description

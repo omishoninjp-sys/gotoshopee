@@ -16,15 +16,16 @@ LANGUAGE_NAMES = {
     "ms": "馬來文",
 }
 
-# 標題前綴（根據目標語言）- 包含當地 SEO 關鍵字
-TITLE_PREFIX = {
-    "zh-TW": "日本代購 日本直送 GOYOUTATI ",
-    "th": "นำเข้าญี่ปุ่น ส่งตรงจากญี่ปุ่น GOYOUTATI ",  # 日本進口 日本直送
-    "en": "Japan Import Direct Ship GOYOUTATI ",
-    "id": "Import Jepang Kirim Langsung GOYOUTATI ",
-    "vi": "Nhập Nhật Bản Ship Trực Tiếp GOYOUTATI ",
-    "pt": "Importação Japão Envio Direto GOYOUTATI ",
-    "ms": "Import Jepun Penghantaran Terus GOYOUTATI ",
+# 標題後綴（根據目標語言）- 放在標題最後面以優化 SEO
+# 品牌/商品名稱應該放在最前面
+TITLE_SUFFIX = {
+    "zh-TW": " | 日本代購 日本直送 GOYOUTATI",
+    "th": " | นำเข้าญี่ปุ่น GOYOUTATI",  # 日本進口 GOYOUTATI
+    "en": " | Japan Import GOYOUTATI",
+    "id": " | Import Jepang GOYOUTATI",
+    "vi": " | Nhập Nhật Bản GOYOUTATI",
+    "pt": " | Importação Japão GOYOUTATI",
+    "ms": " | Import Jepun GOYOUTATI",
 }
 
 # 描述前綴（根據目標語言）
@@ -44,25 +45,27 @@ SEO_PROMPTS = {
         "title": """你是專業的泰國電商 SEO 專家和翻譯。
 請將以下日本商品標題翻譯成泰文，並優化 Shopee Thailand 的搜索排名。
 
-**泰國 Shopee SEO 規則：**
-1. 加入泰國人常搜索的關鍵字：
-   - ของแท้ (正品)、แท้100% (100%正版)
-   - นำเข้าจากญี่ปุ่น (日本進口)
-   - คุณภาพดี (高品質)
-2. 商品類型要用泰文（如 กระเป๋า=包包, ตุ๊กตา=娃娃, เสื้อ=衣服）
-3. 品牌名稱保持英文/日文原文
-4. 標題結尾加上品牌名稱（從原標題提取）
-5. 標題簡潔有力，適合手機閱讀
-6. 不要超過 100 字元
+**Shopee 泰國 SEO 最佳標題格式（務必遵守）：**
+品牌名 + 商品名 + 商品類型(泰文) + ของแท้
 
-**重要：不要使用以下詞彙：**
+**範例：**
+- 「Human Made 帆布袋」→「Human Made กระเป๋าผ้า Canvas Bag ของแท้」
+- 「Onitsuka Tiger MEXICO 66」→「Onitsuka Tiger MEXICO 66 รองเท้า ของแท้」
+- 「SANRIO Hello Kitty 娃娃」→「SANRIO Hello Kitty ตุ๊กตา ของแท้」
+- 「Human Made 零錢包」→「Human Made กระเป๋าใส่เหรียญ Coin Pouch ของแท้」
+
+**重要規則：**
+1. 品牌名稱放在最前面（英文/日文原文）
+2. 商品名稱/型號緊跟在品牌後面
+3. 商品類型用泰文（กระเป๋า=包包, ตุ๊กตา=娃娃, เสื้อ=衣服, รองเท้า=鞋子）
+4. 結尾加 ของแท้ (正品)
+5. 標題控制在 60 字元以內（因為還會加上後綴）
+6. 不要加 GOYOUTATI（系統會自動加在後面）
+
+**禁止使用的詞彙：**
 - พร้อมส่ง (現貨)
 - พรีออเดอร์ (預購)
-- ส่งเร็ว、ส่งวันนี้
-
-**格式範例：**
-「SANRIO Hello Kitty 娃娃」→「ตุ๊กตา Hello Kitty ของแท้ นำเข้าญี่ปุ่น SANRIO」
-「Human Made 帆布袋」→「กระเป๋าผ้า ของแท้ นำเข้าญี่ปุ่น Human Made」
+- นำเข้าจากญี่ปุ่น (系統會自動加)
 
 只輸出翻譯結果：""",
         
@@ -309,9 +312,15 @@ def translate_product(title: str, description: str, target_lang: str) -> tuple:
     return translated_title, translated_desc
 
 
+def get_title_suffix(target_lang: str) -> str:
+    """取得標題後綴（SEO 優化：品牌在前，GOYOUTATI 在後）"""
+    return TITLE_SUFFIX.get(target_lang, TITLE_SUFFIX["en"])
+
+
 def get_title_prefix(target_lang: str) -> str:
-    """取得標題前綴"""
-    return TITLE_PREFIX.get(target_lang, TITLE_PREFIX["en"])
+    """取得標題前綴（已棄用，改用 get_title_suffix）"""
+    # 為了向後兼容，返回空字串
+    return ""
 
 
 def get_desc_prefix(target_lang: str) -> str:
